@@ -111,7 +111,7 @@ trends = df.groupby(['month', 'subreddit']).size().unstack(fill_value=0)
 from bertopic import BERTopic
 from sentence_transformers import SentenceTransformer
 
-embedding_model = SentenceTransformer("BAAI/bge-base-en-v1.5")
+embedding_model = SentenceTransformer("BAAI/bge-m3")
 topic_model = BERTopic(embedding_model=embedding_model, min_topic_size=5)
 topics, probs = topic_model.fit_transform(post_texts, embeddings)
 ```

@@ -11,10 +11,10 @@ and gain insights from their Reddit history using natural language.
 User query: "What did I save about Rust async?"
     |
     v
-[1. Embed query] --> BGE-base-en-v1.5
+[1. Embed query] --> BGE-M3 (dense + sparse vectors)
     |
     v
-[2. Search]       --> LanceDB (top 5-10 relevant posts)
+[2. Hybrid search] --> LanceDB (BM25 + semantic + sparse, top 5-10 posts)
     |
     v
 [3. Prompt LLM]   --> "Given these posts, answer: {query}"
@@ -60,27 +60,35 @@ Users choose via config:
 
 ```ini
 [llm]
-provider = ollama          # or: openai, anthropic, google
-model = llama3.1:8b        # or: gpt-4o-mini, claude-haiku-4-5, gemini-1.5-flash
+provider = llama-cpp       # or: ollama, openai, anthropic, google
+model = phi-4-q4_k_m.gguf # or: qwen2.5:7b, gpt-4o-mini, claude-haiku-4-5, gemini-1.5-flash
 ```
 
-### Local: Ollama
+### Local LLMs (via llama-cpp-python or Ollama)
 
-| Model | Size | RAM | Speed (CPU) | Quality |
-|-------|------|-----|-------------|---------|
-| Llama 3.1 8B | 4.7GB | 8GB | 18 t/s | GPT-3.5 level |
-| Qwen 2.5 7B | 4.4GB | 8GB | 20 t/s | Strong multilingual |
-| Mistral 7B v0.3 | 4.1GB | 8GB | 24 t/s | Fastest |
-| Qwen 2.5 14B | 8GB | 16GB | 14 t/s | Better quality |
+| Model | Params | RAM | Best For | Notes |
+|-------|--------|-----|----------|-------|
+| **Phi-4** | 14B | 10GB | Best quality/size ratio | Matches many 70B models on reasoning |
+| **Qwen 2.5** | 7B | 8GB | General RAG + multilingual | Strong all-rounder |
+| **SmolLM3** | 3B | 4GB | Minimal hardware | Outperforms Llama-3.2-3B at same size |
+| **Gemma-3n-E2B** | 5B (2B active) | 4GB | On-device / low resource | Selective parameter activation |
+| **Qwen 2.5 Coder** | 7B | 8GB | Code-heavy subreddits | Beats GPT-4o on coding benchmarks |
+
+> Note: The earlier recommendation of "Llama 3.1 8B = GPT-3.5 quality" was outdated.
+> Current small models (Phi-4, Qwen 2.5) compete with GPT-4-level quality on many tasks.
+
+**Two runtime options**:
+- **llama-cpp-python**: Direct C++ bindings, zero overhead, pip-only install, supports embeddings AND inference
+- **Ollama**: Simpler UX (`ollama pull`), 10-15% HTTP overhead, better for beginners
 
 **Minimum hardware (CPU-only, no GPU):**
-- 8GB RAM for 7B models
+- 4GB RAM for 3B models, 8GB for 7B, 10-16GB for 14B
 - 4+ core modern CPU (Intel i5+, M1+)
-- ~10GB disk
+- ~5-10GB disk per model
 
 **Apple Silicon performance:**
-- M1: ~20-30 t/s
-- M3: ~30-40 t/s
+- M1: ~20-30 t/s (7B)
+- M3: ~30-50 t/s (7B)
 
 ### Cloud APIs
 
