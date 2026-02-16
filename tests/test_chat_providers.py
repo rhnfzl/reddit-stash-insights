@@ -187,5 +187,72 @@ class TestOllamaProvider(unittest.TestCase):
         self.assertIsInstance(provider, LLMProvider)
 
 
+class TestOpenAIProvider(unittest.TestCase):
+    """Tests for the OpenAIProvider."""
+
+    def _make_provider(self, mock_openai_cls: MagicMock, **kwargs):
+        """Instantiate OpenAIProvider with the ``openai`` module mocked."""
+        fake_mod = types.ModuleType("openai")
+        fake_mod.OpenAI = mock_openai_cls  # type: ignore[attr-defined]
+        with patch.dict(sys.modules, {"openai": fake_mod}):
+            mod = importlib.import_module("rsi.chat.providers.openai_provider")
+            importlib.reload(mod)
+            return mod.OpenAIProvider(model="gpt-4o-mini", api_key="test-key", **kwargs)
+
+    def test_generate(self):
+        mock_openai_cls = MagicMock()
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        mock_choice = MagicMock()
+        mock_choice.message.content = "Hello from OpenAI!"
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_client.chat.completions.create.return_value = mock_response
+
+        from rsi.chat.providers.base import ChatMessage
+
+        provider = self._make_provider(mock_openai_cls)
+        result = provider.generate([ChatMessage(role="user", content="Hi")])
+
+        self.assertEqual(result, "Hello from OpenAI!")
+        mock_client.chat.completions.create.assert_called_once()
+
+    def test_stream(self):
+        mock_openai_cls = MagicMock()
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Build streaming chunks
+        chunk1 = MagicMock()
+        chunk1.choices = [MagicMock()]
+        chunk1.choices[0].delta.content = "Hello"
+
+        chunk2 = MagicMock()
+        chunk2.choices = [MagicMock()]
+        chunk2.choices[0].delta.content = " world"
+
+        chunk3 = MagicMock()
+        chunk3.choices = [MagicMock()]
+        chunk3.choices[0].delta.content = None
+
+        mock_client.chat.completions.create.return_value = iter([chunk1, chunk2, chunk3])
+
+        from rsi.chat.providers.base import ChatMessage
+
+        provider = self._make_provider(mock_openai_cls)
+        tokens = list(provider.stream([ChatMessage(role="user", content="Hi")]))
+
+        self.assertEqual(tokens, ["Hello", " world"])
+
+    def test_satisfies_protocol(self):
+        mock_openai_cls = MagicMock()
+        provider = self._make_provider(mock_openai_cls)
+
+        from rsi.chat.providers.base import LLMProvider
+
+        self.assertIsInstance(provider, LLMProvider)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -35,6 +35,9 @@ chat = [
 chat-ollama = [
     "ollama>=0.6",
 ]
+chat-openai = [
+    "openai>=1.0",
+]
 mcp = [
     "mcp>=1.26",
 ]
@@ -43,7 +46,7 @@ ui = [
     "plotly>=6.0",
 ]
 all = [
-    "reddit-stash-insights[search,graph,analytics,chat,chat-ollama,mcp,ui]",
+    "reddit-stash-insights[search,graph,analytics,chat,chat-ollama,chat-openai,mcp,ui]",
 ]
 dev = [
     "ruff>=0.15",
