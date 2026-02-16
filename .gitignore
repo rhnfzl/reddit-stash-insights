@@ -19,5 +19,7 @@ docs/research/
 docs/plans/
 reddit/
 CLAUDE.md
+ab_test_rag.py
 ab_test_results_*.json
+tests/fixtures/rag_test_questions.json
 *_log.txt
