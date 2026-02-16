@@ -298,3 +298,19 @@ def chat(
     else:
         # Interactive REPL
         _run_repl(engine, limit=_limit, stream=stream)
+
+
+@app.command()
+def mcp(
+    transport: str = typer.Option("stdio", "--transport", "-t", help="Transport: stdio or sse"),
+) -> None:
+    """Start the MCP server for Claude Code integration."""
+    import asyncio
+
+    from rsi.mcp_server import run_stdio
+
+    if transport == "stdio":
+        asyncio.run(run_stdio())
+    else:
+        typer.echo(f"Transport '{transport}' not yet supported. Use 'stdio'.")
+        raise typer.Exit(1)
