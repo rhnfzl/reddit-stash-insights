@@ -1,7 +1,6 @@
 """Tests for CLI commands."""
 import unittest
 import tempfile
-from pathlib import Path
 from typer.testing import CliRunner
 
 
