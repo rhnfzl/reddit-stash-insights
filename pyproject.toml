@@ -55,6 +55,9 @@ dev = [
 [project.scripts]
 rsi = "rsi.cli:app"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/rsi"]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 120
