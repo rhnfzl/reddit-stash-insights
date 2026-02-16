@@ -44,6 +44,11 @@ class Settings:
     llm_provider: str = "ollama"  # ollama, llama-cpp, openai, anthropic, google
     llm_model: str = "qwen2.5:7b"
 
+    # Chat / RAG
+    chat_context_docs: int = 5  # number of context docs for RAG
+    chat_search_mode: str = "hybrid"  # default search mode for chat
+    chat_max_history: int = 10  # max conversation turns to keep
+
     # S3 (optional, for remote reddit-stash data)
     s3_bucket: Optional[str] = None
     s3_prefix: str = "reddit/"
@@ -72,6 +77,11 @@ class Settings:
             settings.llm_provider = llm.get("provider", settings.llm_provider)
             settings.llm_model = llm.get("model", settings.llm_model)
 
+            chat = data.get("chat", {})
+            settings.chat_context_docs = chat.get("context_docs", settings.chat_context_docs)
+            settings.chat_search_mode = chat.get("search_mode", settings.chat_search_mode)
+            settings.chat_max_history = chat.get("max_history", settings.chat_max_history)
+
             s3 = data.get("s3", {})
             settings.s3_bucket = s3.get("bucket", settings.s3_bucket)
             settings.s3_prefix = s3.get("prefix", settings.s3_prefix)
@@ -87,6 +97,10 @@ class Settings:
             settings.llm_provider = v
         if v := os.environ.get("RSI_LLM_MODEL"):
             settings.llm_model = v
+        if v := os.environ.get("RSI_CHAT_CONTEXT_DOCS"):
+            settings.chat_context_docs = int(v)
+        if v := os.environ.get("RSI_CHAT_SEARCH_MODE"):
+            settings.chat_search_mode = v
         if v := os.environ.get("RSI_S3_BUCKET"):
             settings.s3_bucket = v
         if v := os.environ.get("RSI_S3_PREFIX"):

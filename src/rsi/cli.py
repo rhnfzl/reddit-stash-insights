@@ -1,6 +1,7 @@
 """CLI entry point for reddit-stash-insights."""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -141,3 +142,159 @@ def search(
         typer.echo(f"  {i}. [r/{sub}] (score: {score}) {text_preview}")
         typer.echo(f"     File: {r.get('file_path', '?')}")
         typer.echo()
+
+
+# ---------------------------------------------------------------------------
+# Chat helpers
+# ---------------------------------------------------------------------------
+
+def _build_chat_engine(
+    *,
+    provider: str,
+    model: str,
+    db_path: Path,
+    mode: str,
+    max_history: int,
+    context_docs: int,
+) -> "DirectEngine":  # noqa: F821 — forward ref resolved at runtime
+    """Construct a :class:`DirectEngine` from CLI / config parameters."""
+    from rsi.chat.engine import DirectEngine
+    from rsi.chat.providers.base import create_provider
+    from rsi.indexer.search import SearchEngine, SearchMode
+
+    search_engine = SearchEngine(db_path=db_path)
+    llm = create_provider(provider=provider, model=model)
+    return DirectEngine(
+        search_engine=search_engine,
+        llm=llm,
+        search_mode=SearchMode(mode),
+        max_history_turns=max_history,
+    )
+
+
+def _print_sources(sources: list[dict]) -> None:
+    """Pretty-print source documents."""
+    if not sources:
+        typer.echo("  No sources available.")
+        return
+    typer.echo()
+    for i, src in enumerate(sources, 1):
+        sub = src.get("subreddit", "?")
+        fpath = src.get("file_path", "?")
+        preview = src.get("text", "")[:100].replace("\n", " ")
+        typer.echo(f"  [{i}] r/{sub} -- {fpath}")
+        typer.echo(f"      {preview}")
+
+
+_REPL_HELP = """\
+Commands:
+  /help     Show this message
+  /clear    Clear conversation history
+  /sources  Show sources from the last answer
+  /quit     Exit chat (or /exit)
+"""
+
+
+def _run_repl(engine: "DirectEngine", *, limit: int, stream: bool) -> None:  # noqa: F821
+    """Interactive read-eval-print loop."""
+    typer.echo("rsi chat  --  type /help for commands, /quit to exit\n")
+
+    while True:
+        try:
+            line = input("you> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            typer.echo()
+            break
+
+        if not line:
+            continue
+
+        # Slash commands
+        if line.startswith("/"):
+            cmd = line.lower()
+            if cmd in ("/quit", "/exit"):
+                break
+            if cmd == "/help":
+                typer.echo(_REPL_HELP)
+                continue
+            if cmd == "/clear":
+                engine.clear_history()
+                typer.echo("History cleared.\n")
+                continue
+            if cmd == "/sources":
+                sources = engine.history.last_sources()
+                if not sources:
+                    typer.echo("No sources yet.\n")
+                else:
+                    _print_sources(sources)
+                    typer.echo()
+                continue
+            typer.echo(f"Unknown command: {line}  (type /help)\n")
+            continue
+
+        # Regular question
+        if stream:
+            _stream_answer(engine, line, limit=limit)
+        else:
+            resp = engine.chat(line, limit=limit)
+            typer.echo(f"\n{resp.answer}")
+            _print_sources(resp.sources)
+            typer.echo()
+
+
+def _stream_answer(engine: "DirectEngine", query: str, *, limit: int) -> None:  # noqa: F821
+    """Stream tokens to stdout, then print sources."""
+    token_iter, sources = engine.chat_stream(query, limit=limit)
+    typer.echo()
+    for token in token_iter:
+        sys.stdout.write(token)
+        sys.stdout.flush()
+    typer.echo()
+    _print_sources(sources)
+    typer.echo()
+
+
+@app.command()
+def chat(
+    question: Optional[str] = typer.Argument(None, help="Question to ask (omit for interactive REPL)"),
+    provider: Optional[str] = typer.Option(None, "--provider", "-p", help="LLM provider: ollama, llama-cpp, openai"),
+    model: Optional[str] = typer.Option(None, "--model", help="Model name or path"),
+    db_path: Optional[Path] = typer.Option(None, "--db-path", help="Path to vector database"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-n", help="Number of context documents"),
+    mode: Optional[str] = typer.Option(None, "--mode", "-m", help="Search mode: hybrid, semantic, keyword"),
+    no_stream: bool = typer.Option(False, "--no-stream", help="Disable streaming (print complete response)"),
+) -> None:
+    """Ask questions about your Reddit archive using RAG chat."""
+    from rsi.config import Settings
+
+    settings = Settings.load()
+
+    # Resolve options: CLI flag > config > default
+    _provider = provider or settings.llm_provider
+    _model = model or settings.llm_model
+    _db_path = db_path or settings.db_path
+    _mode = mode or settings.chat_search_mode
+    _limit = limit if limit is not None else settings.chat_context_docs
+
+    engine = _build_chat_engine(
+        provider=_provider,
+        model=_model,
+        db_path=_db_path,
+        mode=_mode,
+        max_history=settings.chat_max_history,
+        context_docs=settings.chat_context_docs,
+    )
+
+    stream = not no_stream
+
+    if question:
+        # Single-turn mode
+        if stream:
+            _stream_answer(engine, question, limit=_limit)
+        else:
+            resp = engine.chat(question, limit=_limit)
+            typer.echo(resp.answer)
+            _print_sources(resp.sources)
+    else:
+        # Interactive REPL
+        _run_repl(engine, limit=_limit, stream=stream)
