@@ -41,15 +41,30 @@ def _load_settings() -> Settings:
 
 
 def _get_engine(provider: str, model: str, search_mode: str, max_history: int, db_path: Path):
-    """Return a cached DirectEngine, rebuilding only when parameters change."""
-    cache_key = (provider, model, search_mode, max_history, str(db_path))
+    """Return a cached DirectEngine, rebuilding only when parameters change.
+
+    Runs provider availability checking and auto-fallback before creating the
+    engine.  Stores a fallback note in ``st.session_state.provider_note`` when
+    the selected provider was unavailable.
+    """
+    from rsi.chat.providers.availability import find_available_provider
+
+    # Run availability check / fallback.
+    actual_provider, actual_model, note = find_available_provider(provider, model)
+    st.session_state.provider_note = note
+
+    if actual_provider is None:
+        # No provider available at all — raise so the caller can display the error.
+        raise ConnectionError(note)
+
+    cache_key = (actual_provider, actual_model, search_mode, max_history, str(db_path))
     if st.session_state.get("engine_key") != cache_key:
         from rsi.chat.engine import DirectEngine
         from rsi.chat.providers.base import create_provider
         from rsi.indexer.search import SearchEngine
 
         search_engine = SearchEngine(db_path=db_path)
-        llm = create_provider(provider=provider, model=model)
+        llm = create_provider(provider=actual_provider, model=actual_model)
         engine = DirectEngine(
             search_engine=search_engine,
             llm=llm,
@@ -96,10 +111,21 @@ with st.sidebar:
         index=_SEARCH_MODES.index(settings.chat_search_mode) if settings.chat_search_mode in _SEARCH_MODES else 0,
     )
 
+    # Provider status indicator
+    if st.session_state.get("provider_note"):
+        st.info(st.session_state.provider_note)
+
+    # Index status
+    if settings.db_path.exists():
+        st.caption(f"Index: {settings.db_path}")
+    else:
+        st.warning("No index found. Run `rsi index` first.")
+
     if st.button("Clear history"):
         st.session_state.messages = []
-        if "engine" in st.session_state:
-            st.session_state.engine.clear_history()
+        st.session_state.pop("engine", None)
+        st.session_state.pop("engine_key", None)
+        st.session_state.pop("provider_note", None)
         st.rerun()
 
 # ---------------------------------------------------------------------------
@@ -114,6 +140,10 @@ if "messages" not in st.session_state:
 # ---------------------------------------------------------------------------
 
 st.title("Reddit Stash Chat")
+
+# Welcome message when no conversation yet.
+if not st.session_state.messages:
+    st.caption("Ask questions about your Reddit archive. Your indexed content is searchable via RAG.")
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
@@ -146,6 +176,22 @@ if prompt := st.chat_input("Ask about your Reddit archive..."):
             _display_sources(sources)
             st.session_state.messages.append({"role": "assistant", "content": answer, "sources": sources})
 
-        except Exception:
-            logger.exception("Chat error")
-            st.error("Something went wrong. Check that your LLM provider is running and the index exists.")
+        except ConnectionError as exc:
+            st.error(str(exc))
+            st.session_state.pop("engine", None)
+            st.session_state.pop("engine_key", None)
+
+        except FileNotFoundError as exc:
+            st.error(f"Model file not found: {exc}")
+            st.session_state.pop("engine", None)
+            st.session_state.pop("engine_key", None)
+
+        except Exception as exc:
+            error_msg = str(exc)
+            if "Connection refused" in error_msg:
+                st.error("LLM provider not available. The system will try alternatives on next message.")
+            else:
+                logger.exception("Chat error")
+                st.error(f"Error: {error_msg}")
+            st.session_state.pop("engine", None)
+            st.session_state.pop("engine_key", None)

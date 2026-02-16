@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import types
 import unittest
 from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
@@ -252,6 +254,99 @@ class TestOpenAIProvider(unittest.TestCase):
         from rsi.chat.providers.base import LLMProvider
 
         self.assertIsInstance(provider, LLMProvider)
+
+
+class TestCheckProvider(unittest.TestCase):
+    """Tests for provider availability checking."""
+
+    def test_check_ollama_unavailable(self):
+        """Ollama check returns error when server is not reachable."""
+        mock_requests = MagicMock()
+        mock_requests.get.side_effect = ConnectionError("Connection refused")
+        with patch.dict(sys.modules, {"requests": mock_requests}):
+            from rsi.chat.providers.availability import _check_ollama
+
+            result = _check_ollama()
+        self.assertIsNotNone(result)
+        self.assertIn("not reachable", result)
+
+    def test_check_ollama_available(self):
+        """Ollama check returns None when server responds."""
+        mock_requests = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_requests.get.return_value = mock_resp
+        with patch.dict(sys.modules, {"requests": mock_requests}):
+            from rsi.chat.providers.availability import _check_ollama
+
+            result = _check_ollama()
+        self.assertIsNone(result)
+
+    def test_check_llama_cpp_no_model(self):
+        """llama-cpp check returns error for nonexistent model path."""
+        fake_llama = types.ModuleType("llama_cpp")
+        with patch.dict(sys.modules, {"llama_cpp": fake_llama}):
+            from rsi.chat.providers import availability
+
+            with patch.object(availability, "_MODELS_DIR", Path("/tmp/nonexistent_rsi_models_dir")):
+                result = availability.check_provider("llama-cpp", "/tmp/nonexistent.gguf")
+        self.assertIsNotNone(result)
+        self.assertIn("No GGUF model found", result)
+
+    def test_check_openai_no_key(self):
+        """OpenAI check returns error when API key is not set."""
+        fake_openai = types.ModuleType("openai")
+        with patch.dict(sys.modules, {"openai": fake_openai}), patch.dict(os.environ, {}, clear=True):
+            from rsi.chat.providers.availability import _check_openai
+
+            result = _check_openai()
+        self.assertIsNotNone(result)
+        self.assertIn("OPENAI_API_KEY", result)
+
+
+class TestFindAvailableProvider(unittest.TestCase):
+    """Tests for the fallback logic in find_available_provider."""
+
+    def test_fallback_to_alternative(self):
+        """When selected provider is unavailable, falls back to an alternative."""
+        from rsi.chat.providers import availability
+
+        with (
+            patch.object(availability, "check_provider", side_effect=lambda p, m: "unavailable" if p == "ollama" else None),
+            patch.object(availability, "_resolve_model", side_effect=lambda p, m: m),
+        ):
+            provider, model, note = availability.find_available_provider("ollama", "qwen2.5:7b")
+
+        self.assertIsNotNone(provider)
+        self.assertNotEqual(provider, "ollama")
+        self.assertIsNotNone(note)
+        self.assertIn("ollama", note.lower())
+
+    def test_all_unavailable(self):
+        """When no provider is available, returns None with error."""
+        from rsi.chat.providers import availability
+
+        with patch.object(availability, "check_provider", return_value="unavailable"):
+            provider, model, note = availability.find_available_provider("ollama", "qwen2.5:7b")
+
+        self.assertIsNone(provider)
+        self.assertIsNone(model)
+        self.assertIn("No LLM provider available", note)
+
+    def test_gguf_auto_detect(self):
+        """_resolve_gguf_path finds GGUF files in the models directory."""
+        from rsi.chat.providers import availability
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a fake GGUF file
+            gguf_file = Path(tmpdir) / "test-model.gguf"
+            gguf_file.touch()
+            with patch.object(availability, "_MODELS_DIR", Path(tmpdir)):
+                result = availability._resolve_gguf_path("not-a-real-path")
+        self.assertIsNotNone(result)
+        self.assertTrue(result.endswith(".gguf"))
 
 
 if __name__ == "__main__":
