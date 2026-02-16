@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "reddit-stash-insights"
+version = "0.1.0"
+description = "Semantic search, knowledge graph, analytics, and AI chat for reddit-stash archives"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "pyyaml>=6.0",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+search = [
+    "sentence-transformers>=3.0",
+    "lancedb>=0.29",
+    "FlagEmbedding>=1.2",
+]
+graph = [
+    "networkx>=3.0",
+    "bertopic>=0.16",
+    "pyvis>=0.3",
+    "sentence-transformers>=3.0",
+]
+analytics = [
+    "plotly>=5.0",
+    "pandas>=2.0",
+]
+chat = [
+    "llama-index>=0.11",
+]
+chat-local = [
+    "llama-cpp-python>=0.3",
+]
+chat-ollama = [
+    "ollama>=0.3",
+]
+mcp = [
+    "mcp>=1.26",
+]
+ui = [
+    "streamlit>=1.35",
+    "plotly>=5.0",
+]
+all = [
+    "reddit-stash-insights[search,graph,analytics,chat,chat-ollama,mcp,ui]",
+]
+dev = [
+    "ruff>=0.5",
+]
+
+[project.scripts]
+rsi = "rsi.cli:app"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
