@@ -56,6 +56,11 @@ dev = [
 [project.scripts]
 rsi = "rsi.cli:app"
 
+[project.urls]
+Repository = "https://github.com/rhnfzl/reddit-stash-insights"
+Issues = "https://github.com/rhnfzl/reddit-stash-insights/issues"
+Documentation = "https://github.com/rhnfzl/reddit-stash-insights#readme"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/rsi"]
 
