@@ -132,5 +132,60 @@ class TestLlamaCppProvider(unittest.TestCase):
         self.assertIsInstance(provider, LLMProvider)
 
 
+class TestOllamaProvider(unittest.TestCase):
+    """Tests for the OllamaProvider."""
+
+    def _make_provider(self, mock_requests: MagicMock, **kwargs):
+        """Instantiate OllamaProvider with the ``requests`` module mocked."""
+        fake_mod = types.ModuleType("requests")
+        fake_mod.post = mock_requests.post  # type: ignore[attr-defined]
+        with patch.dict(sys.modules, {"requests": fake_mod}):
+            mod = importlib.import_module("rsi.chat.providers.ollama_provider")
+            importlib.reload(mod)
+            provider = mod.OllamaProvider(model="llama3", **kwargs)
+        # The provider captured the fake module as self._requests — methods work outside the ctx.
+        return provider
+
+    def test_generate(self):
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"message": {"content": "Hello from Ollama!"}}
+        mock_requests.post.return_value = mock_response
+
+        from rsi.chat.providers.base import ChatMessage
+
+        provider = self._make_provider(mock_requests)
+        result = provider.generate([ChatMessage(role="user", content="Hi")])
+
+        self.assertEqual(result, "Hello from Ollama!")
+        mock_requests.post.assert_called_once()
+
+    def test_stream(self):
+        mock_requests = MagicMock()
+        mock_response = MagicMock()
+        # iter_lines returns bytes that json.loads can parse
+        mock_response.iter_lines.return_value = [
+            b'{"message":{"content":"Hello"},"done":false}',
+            b'{"message":{"content":" world"},"done":false}',
+            b'{"done":true}',
+        ]
+        mock_requests.post.return_value = mock_response
+
+        from rsi.chat.providers.base import ChatMessage
+
+        provider = self._make_provider(mock_requests)
+        tokens = list(provider.stream([ChatMessage(role="user", content="Hi")]))
+
+        self.assertEqual(tokens, ["Hello", " world"])
+
+    def test_satisfies_protocol(self):
+        mock_requests = MagicMock()
+        provider = self._make_provider(mock_requests)
+
+        from rsi.chat.providers.base import LLMProvider
+
+        self.assertIsInstance(provider, LLMProvider)
+
+
 if __name__ == "__main__":
     unittest.main()
