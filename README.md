@@ -129,27 +129,20 @@ streamlit run src/rsi/ui/chat.py
 
 ### MCP Server
 
-Expose search and chat as tools for Claude Code:
+Expose your Reddit archive as tools for Claude. Works with both the Claude desktop app and Claude Code.
 
 ```bash
 pip install reddit-stash-insights[search,chat,mcp]
-rsi mcp  # Starts stdio transport
 ```
 
-Add to your Claude Code settings (`.claude/settings.json`):
+This exposes two tools:
 
-```json
-{
-  "mcpServers": {
-    "reddit-stash": {
-      "command": "rsi",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+| Tool | Description |
+|------|-------------|
+| `reddit_search` | Search your archive (no LLM needed for results) |
+| `reddit_chat` | Ask questions with RAG — retrieves context and generates answers |
 
-This exposes two tools: `reddit_search` (retrieval only) and `reddit_chat` (RAG with LLM).
+See [docs/mcp.md](docs/mcp.md) for setup instructions (Claude desktop app, Claude Code) and usage examples.
 
 ## Configuration
 
