@@ -17,7 +17,10 @@ class VectorStore:
 
     def __init__(self, db_path: Path):
         self._db = lancedb.connect(str(db_path))
-        self._table = None
+        try:
+            self._table = self._db.open_table(TABLE_NAME)
+        except Exception:
+            self._table = None
 
     def add_records(self, records: List[Dict[str, Any]]) -> None:
         """Add records to the vector store. Creates table on first call, appends after."""

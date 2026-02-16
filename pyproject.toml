@@ -30,9 +30,6 @@ analytics = [
     "pandas>=3.0",
 ]
 chat = [
-    "llama-index>=0.14",
-]
-chat-local = [
     "llama-cpp-python>=0.3.16",
 ]
 chat-ollama = [

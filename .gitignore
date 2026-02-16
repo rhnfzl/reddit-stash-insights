@@ -14,3 +14,10 @@ data/
 .DS_Store
 .ruff_cache/
 .pytest_cache/
+.nox/
+docs/research/
+docs/plans/
+reddit/
+CLAUDE.md
+ab_test_results_*.json
+*_log.txt
