@@ -113,33 +113,89 @@ Store as metadata: id, subreddit, score, timestamp, file_path, author.
 - Comments lack context without the parent post
 - Adds complexity without meaningful accuracy gains for search
 
-### Handling long posts (>512 tokens)
+### Handling long posts
 
-- BGE truncates at 512 tokens — for 95% of Reddit posts this is fine
-- For the 5% that are longer: truncate to title + first 400 tokens of body
-- OR use nomic-embed-text-v1.5 (8192 tokens) as fallback for long posts
+BGE-M3 supports 8192 tokens natively, so even very long Reddit threads are handled
+without truncation. No fallback model needed (unlike BGE-base-en-v1.5's 512 limit).
 
-## Incremental Indexing Strategy
+## Hybrid Search: BM25 + Semantic + Sparse
+
+### Why Hybrid Search Matters for Reddit Content
+
+Pure semantic search misses exact keyword matches:
+- Query: "PRAW" → semantic search might return "Reddit API library" posts but miss ones mentioning "PRAW" by name
+- Query: "ELI5 quantum computing" → BM25 catches the exact "ELI5" keyword, semantic catches conceptually similar explanations
+
+IBM research confirms that **three-way hybrid retrieval (BM25 + dense + sparse)
+is the optimal configuration for RAG**, outperforming any two-way combination.
+
+### Architecture: Three-Way Hybrid in LanceDB
+
+LanceDB provides ALL THREE search modes natively — no external BM25 library needed:
 
 ```
-Daily run:
-1. reddit-stash generates new markdown files
-2. rsi index reads file_log.json for new entries since last run
-3. Only new files are embedded and added to LanceDB
-4. LanceDB zero-copy append (no rebuild)
+                    User Query
+                        │
+        ┌───────────────┼───────────────┐
+        ▼               ▼               ▼
+   ┌─────────┐   ┌───────────┐   ┌───────────┐
+   │  BM25   │   │   Dense   │   │  Sparse   │
+   │ (Tantivy│   │  Vectors  │   │  Vectors  │
+   │  FTS)   │   │ (BGE-M3)  │   │ (BGE-M3)  │
+   └────┬────┘   └─────┬─────┘   └─────┬─────┘
+        │               │               │
+        └───────┬───────┴───────┬───────┘
+                ▼               ▼
+         ┌────────────────────────┐
+         │   Reranker (RRF or    │
+         │  LinearCombination)   │
+         └───────────┬───────────┘
+                     ▼
+              Top-K Results → RAG Prompt
 ```
 
-This means the daily index update takes <10 seconds for ~100 new posts.
+**Component 1: BM25 via Tantivy (LanceDB built-in)**
+- Exact keyword matching using BM25 scoring
+- Powered by Tantivy (Rust-based FTS engine)
+- Created via `table.create_fts_index("text")`
+- Catches: exact terms, acronyms (PRAW, ELI5), proper nouns
 
-## Code Sketch
+**Component 2: Dense Vectors (BGE-M3)**
+- 1024-dimensional semantic embeddings
+- Captures meaning regardless of exact words
+- Catches: paraphrases, conceptually similar content
+
+**Component 3: Sparse Vectors (BGE-M3)**
+- Learned term importance weights (like BM25 but trained)
+- Generated alongside dense vectors at zero extra cost
+- Catches: important terms weighted by context, not just frequency
+
+### LanceDB Rerankers
+
+LanceDB has built-in rerankers to merge results from multiple search modes:
+
+| Reranker | How It Works | Speed | Quality |
+|----------|-------------|-------|---------|
+| `LinearCombinationReranker` | Weighted score: 0.7 × vector + 0.3 × FTS (default) | Fastest | Good |
+| `RRFReranker` | Reciprocal Rank Fusion: combines rank positions | Fast | Better |
+| `CrossEncoderReranker` | Neural model re-scores pairs | Slow | Best |
+| `CohereReranker` | Cohere API re-ranking | Medium | Very Good |
+| Custom | Implement `Reranker` base class | Varies | Varies |
+
+**Recommended**: Start with `RRFReranker(k=60)` — good quality, no API cost, fast.
+Upgrade to `CrossEncoderReranker` if precision matters more than speed.
+
+### Code Sketch: Hybrid Search Pipeline
 
 ```python
 import lancedb
-from sentence_transformers import SentenceTransformer
+from FlagEmbedding import BGEM3FlagModel
+from lancedb.rerankers import RRFReranker
 from pathlib import Path
 import yaml
 
-model = SentenceTransformer('BAAI/bge-base-en-v1.5')
+# Initialize BGE-M3 (generates dense + sparse in one call)
+model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=True)
 db = lancedb.connect("./data/vector_db")
 
 def index_post(md_file: Path) -> dict:
@@ -147,41 +203,148 @@ def index_post(md_file: Path) -> dict:
     _, frontmatter, body = content.split("---", 2)
     meta = yaml.safe_load(frontmatter)
 
-    text = f"{meta.get('title', '')}\n\n{body[:2000]}"
-    embedding = model.encode(text)
+    text = f"{meta.get('title', '')}\n\n{body[:4000]}"
+
+    # BGE-M3 returns dense + sparse + colbert in one call
+    output = model.encode(
+        [text],
+        return_dense=True,
+        return_sparse=True,
+        return_colbert_vecs=False  # ColBERT is optional, increases storage
+    )
 
     return {
-        "vector": embedding,
-        "text": text[:500],  # preview
-        "id": meta['id'],
-        "subreddit": meta.get('subreddit', ''),
-        "score": meta.get('score', 0),
-        "timestamp": meta.get('timestamp', ''),
-        "file_path": str(md_file)
+        "vector": output["dense_vecs"][0],       # 1024-dim dense
+        "sparse_vector": output["lexical_weights"][0],  # learned sparse
+        "text": text,                              # full text for BM25 FTS
+        "id": meta["id"],
+        "subreddit": meta.get("subreddit", ""),
+        "score": meta.get("score", 0),
+        "timestamp": meta.get("timestamp", ""),
+        "file_path": str(md_file),
     }
 
-# Search
-def search(query: str, subreddit: str = None, limit: int = 10):
-    table = db.open_table("posts")
-    q = table.search(model.encode(query)).limit(limit)
+# Create table with FTS index
+table = db.create_table("posts", data=posts)
+table.create_fts_index("text")  # Enables BM25 via Tantivy
+
+# Hybrid search: BM25 + dense vectors, merged by RRF
+def hybrid_search(query: str, subreddit: str = None, limit: int = 10):
+    reranker = RRFReranker(k=60)
+
+    q = table.search(query, query_type="hybrid") \
+             .rerank(reranker=reranker) \
+             .limit(limit)
+
     if subreddit:
         q = q.where(f"subreddit = '{subreddit}'")
+
     return q.to_pandas()
+
+# Pure semantic search (when you want only meaning-based results)
+def semantic_search(query: str, limit: int = 10):
+    query_embedding = model.encode([query], return_dense=True)["dense_vecs"][0]
+    return table.search(query_embedding).limit(limit).to_pandas()
+
+# Pure BM25 search (when you want exact keyword matching)
+def keyword_search(query: str, limit: int = 10):
+    return table.search(query, query_type="fts").limit(limit).to_pandas()
+```
+
+### When Each Search Mode Wins
+
+| Query Type | Best Mode | Example |
+|------------|-----------|---------|
+| Exact terms, acronyms | BM25 | "PRAW", "ELI5", "CUDA 12.4" |
+| Conceptual / paraphrased | Dense semantic | "how to learn programming" |
+| Technical + contextual | Hybrid (all three) | "Rust async error handling patterns" |
+| Known post title | BM25 | "Fitbod Screen Stuck" |
+| Vague / exploratory | Dense semantic | "interesting machine learning stuff" |
+
+### RAG Pipeline with Hybrid Search
+
+The hybrid search feeds directly into the RAG pipeline:
+
+```python
+def rag_query(question: str, llm_provider) -> str:
+    # 1. Hybrid search for relevant posts
+    results = hybrid_search(question, limit=5)
+
+    # 2. Build context from top results
+    context = "\n\n---\n\n".join([
+        f"[r/{row['subreddit']}] {row['text'][:1000]}"
+        for _, row in results.iterrows()
+    ])
+
+    # 3. Generate answer grounded in retrieved posts
+    prompt = f"""Based on the following saved Reddit posts, answer the question.
+Cite which post(s) you used.
+
+Posts:
+{context}
+
+Question: {question}
+
+Answer:"""
+
+    return llm_provider.generate(prompt)
+```
+
+### BM25 Implementation Options Considered
+
+| Option | How | Verdict |
+|--------|-----|---------|
+| **LanceDB Tantivy FTS** | `table.create_fts_index("text")` | **Recommended** — native, no extra deps |
+| rank_bm25 (Python) | Separate in-memory BM25 | Needs manual text preprocessing, redundant |
+| BM25S (scipy-based) | 500x faster than rank_bm25 | Only needed if >1M docs, overkill for us |
+| Elasticsearch | Full BM25 server | Way overkill, requires JVM |
+
+**LanceDB's Tantivy-based FTS is the clear winner** — it gives us BM25 search
+natively within the same database we already use for vectors, with built-in reranking.
+No separate library, no index sync issues, no extra process.
+
+### Tantivy FTS Limitations (Current)
+
+- Only available in Python SDK (not TypeScript)
+- FTS index stored on local filesystem only (not object storage yet)
+- No incremental FTS indexing yet (full rebuild on new data — fast for <100K docs)
+- LanceDB team is actively working on Rust-level FTS integration
+
+For our scale (1K-50K posts), these limitations are not blockers.
+
+## Incremental Indexing Strategy
+
+```
+Daily run:
+1. reddit-stash generates new markdown files
+2. rsi index reads file_log.json for new entries since last run
+3. Only new files get BGE-M3 embeddings (dense + sparse)
+4. LanceDB zero-copy append for vectors
+5. Rebuild FTS index (fast for <100K posts, ~seconds)
 ```
 
 ## Performance Estimates
 
 | Operation              | 1K posts   | 10K posts  | 50K posts  |
 |------------------------|------------|------------|------------|
-| Initial index (CPU)    | ~2 min     | ~20 min    | ~90 min    |
-| Initial index (GPU)    | ~30 sec    | ~5 min     | ~20 min    |
-| Incremental (100 new)  | ~10 sec    | ~10 sec    | ~10 sec    |
-| Search latency         | <20ms      | <50ms      | <100ms     |
-| Disk usage             | ~5 MB      | ~50 MB     | ~250 MB    |
+| Initial index (CPU)    | ~3 min     | ~30 min    | ~120 min   |
+| Initial index (GPU)    | ~45 sec    | ~7 min     | ~30 min    |
+| Incremental (100 new)  | ~15 sec    | ~15 sec    | ~15 sec    |
+| Hybrid search latency  | <30ms      | <60ms      | <120ms     |
+| Disk usage (vectors)   | ~8 MB      | ~80 MB     | ~400 MB    |
+| Disk usage (FTS index) | ~2 MB      | ~20 MB     | ~100 MB    |
+
+Note: BGE-M3 (550M params) is larger than BGE-base-en-v1.5 (110M), so indexing
+is somewhat slower but quality is significantly better.
 
 ## Sources
 
-- MTEB Leaderboard: https://huggingface.co/spaces/mteb/leaderboard
-- LanceDB docs: https://lancedb.github.io/lancedb/
-- BGE models: https://huggingface.co/BAAI/bge-base-en-v1.5
-- Firecrawl vector DB comparison 2025: https://www.firecrawl.dev/blog/best-vector-databases-2025
+- MTEB Leaderboard: [HuggingFace](https://huggingface.co/spaces/mteb/leaderboard)
+- BGE-M3 model card: [HuggingFace](https://huggingface.co/BAAI/bge-m3)
+- LanceDB hybrid search docs: [LanceDB](https://docs.lancedb.com/search/hybrid-search)
+- LanceDB FTS with Tantivy: [LanceDB](https://docs.lancedb.com/search/full-text-search)
+- LanceDB rerankers: [LanceDB blog](https://lancedb.com/blog/hybrid-search-and-custom-reranking-with-lancedb-4c10a6a3447e/)
+- IBM Blended RAG paper: [Infiniflow analysis](https://infiniflow.org/blog/best-hybrid-search-solution)
+- BM25 vs sparse vs hybrid: [Medium](https://medium.com/@dewasheesh.rana/bm25-vs-sparse-vs-hybrid-search-in-rag-from-layman-to-pro-e34ff21c4ada)
+- BM25S (fast BM25): [HuggingFace blog](https://huggingface.co/blog/xhluca/bm25s)
+- Firecrawl vector DB comparison 2025: [Firecrawl](https://www.firecrawl.dev/blog/best-vector-databases-2025)
