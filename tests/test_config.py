@@ -10,7 +10,7 @@ class TestSettings(unittest.TestCase):
 
         s = Settings()
         self.assertEqual(s.embedding_model, "BAAI/bge-m3")
-        self.assertEqual(s.llm_provider, "ollama")
+        self.assertEqual(s.llm_provider, "llama-cpp")
         self.assertEqual(s.llm_model, "qwen2.5:7b")
         self.assertIsNone(s.s3_bucket)
 

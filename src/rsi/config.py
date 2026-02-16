@@ -41,7 +41,7 @@ class Settings:
     db_path: Path = field(default_factory=lambda: DEFAULT_DB_PATH)
 
     # LLM (for future chat module)
-    llm_provider: str = "ollama"  # ollama, llama-cpp, openai, anthropic, google
+    llm_provider: str = "llama-cpp"  # llama-cpp, ollama, openai
     llm_model: str = "qwen2.5:7b"
 
     # Chat / RAG
