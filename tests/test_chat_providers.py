@@ -1,8 +1,12 @@
 """Tests for chat provider protocol and ChatMessage types."""
 from __future__ import annotations
 
+import importlib
+import sys
+import types
 import unittest
 from collections.abc import Iterator
+from unittest.mock import MagicMock, patch
 
 
 class TestChatMessage(unittest.TestCase):
@@ -67,6 +71,65 @@ class TestCreateProvider(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             create_provider(provider="nonexistent", model="some-model")
         self.assertIn("nonexistent", str(ctx.exception))
+
+
+class TestLlamaCppProvider(unittest.TestCase):
+    """Tests for the LlamaCppProvider."""
+
+    def _make_provider(self, mock_llama_cls: MagicMock, **kwargs):
+        """Instantiate LlamaCppProvider with the real llama_cpp module replaced by a fake."""
+        fake_mod = types.ModuleType("llama_cpp")
+        fake_mod.Llama = mock_llama_cls  # type: ignore[attr-defined]
+        with patch.dict(sys.modules, {"llama_cpp": fake_mod}):
+            mod = importlib.import_module("rsi.chat.providers.llama_cpp_provider")
+            importlib.reload(mod)
+            return mod.LlamaCppProvider(model="/tmp/fake.gguf", **kwargs)
+
+    def test_generate(self):
+        mock_llama_cls = MagicMock()
+        mock_llm = MagicMock()
+        mock_llama_cls.return_value = mock_llm
+        mock_llm.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "Hello from llama-cpp!"}}],
+        }
+
+        from rsi.chat.providers.base import ChatMessage
+
+        provider = self._make_provider(mock_llama_cls)
+        result = provider.generate([ChatMessage(role="user", content="Hi")])
+
+        self.assertEqual(result, "Hello from llama-cpp!")
+        mock_llm.create_chat_completion.assert_called_once()
+
+    def test_stream(self):
+        mock_llama_cls = MagicMock()
+        mock_llm = MagicMock()
+        mock_llama_cls.return_value = mock_llm
+        mock_llm.create_chat_completion.return_value = iter([
+            {"choices": [{"delta": {"content": "Hello"}}]},
+            {"choices": [{"delta": {"content": " world"}}]},
+            {"choices": [{"delta": {}}]},
+        ])
+
+        from rsi.chat.providers.base import ChatMessage
+
+        provider = self._make_provider(mock_llama_cls)
+        tokens = list(provider.stream([ChatMessage(role="user", content="Hi")]))
+
+        self.assertEqual(tokens, ["Hello", " world"])
+
+    def test_context_window(self):
+        mock_llama_cls = MagicMock()
+        provider = self._make_provider(mock_llama_cls, n_ctx=8192)
+        self.assertEqual(provider.context_window, 8192)
+
+    def test_satisfies_protocol(self):
+        mock_llama_cls = MagicMock()
+        provider = self._make_provider(mock_llama_cls)
+
+        from rsi.chat.providers.base import LLMProvider
+
+        self.assertIsInstance(provider, LLMProvider)
 
 
 if __name__ == "__main__":
