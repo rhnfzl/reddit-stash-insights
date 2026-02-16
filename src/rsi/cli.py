@@ -46,11 +46,20 @@ def scan(
 def index(
     reddit_dir: Path = typer.Argument(..., help="Path to reddit-stash output directory", exists=True),
     db_path: Optional[Path] = typer.Option(None, "--db-path", help="Path for vector database"),
+    s3_bucket: Optional[str] = typer.Option(None, "--s3-bucket", help="S3 bucket containing reddit-stash data"),
+    s3_prefix: str = typer.Option("reddit/", "--s3-prefix", help="S3 key prefix for reddit-stash files"),
 ):
     """Build or update the vector search index from reddit-stash content."""
     from rsi.config import DEFAULT_DB_PATH
     from rsi.core.scanner import scan_directory
     from rsi.indexer.search import SearchEngine
+
+    # If S3 bucket specified, fetch files first
+    if s3_bucket:
+        from rsi.core.s3_fetch import fetch_from_s3
+        typer.echo(f"Fetching from s3://{s3_bucket}/{s3_prefix}...")
+        reddit_dir = fetch_from_s3(bucket=s3_bucket, prefix=s3_prefix)
+        typer.echo(f"Files cached to {reddit_dir}")
 
     if db_path is None:
         db_path = DEFAULT_DB_PATH
