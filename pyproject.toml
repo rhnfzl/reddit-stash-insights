@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "reddit-stash-insights"
 version = "0.1.0"
 description = "Semantic search, knowledge graph, analytics, and AI chat for reddit-stash archives"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
     "pyyaml>=6.0",
