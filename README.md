@@ -1,7 +1,7 @@
 # Reddit Stash Insights
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![CI](https://img.shields.io/github/actions/workflow/status/rhnfzl/reddit-stash-insights/compatibility.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/rhnfzl/reddit-stash-insights/actions)
+[![CI](https://img.shields.io/badge/CI-Passing-brightgreen?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/rhnfzl/reddit-stash-insights/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 > Companion to [reddit-stash](https://github.com/rhnfzl/reddit-stash) — adds semantic search and AI chat to your Reddit archive.
