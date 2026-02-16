@@ -23,13 +23,21 @@ def _get_engine() -> DirectEngine:
     """Return (or create) the shared :class:`DirectEngine`."""
     global _engine  # noqa: PLW0603
     if _engine is None:
+        from rsi.chat.providers.availability import find_available_provider
         from rsi.chat.providers.base import create_provider
         from rsi.config import Settings
         from rsi.indexer.search import SearchEngine, SearchMode
 
         settings = Settings.load()
         search_engine = SearchEngine(db_path=settings.db_path)
-        llm = create_provider(provider=settings.llm_provider, model=settings.llm_model)
+
+        provider, model, note = find_available_provider(settings.llm_provider, settings.llm_model)
+        if provider is None:
+            raise RuntimeError(f"No LLM provider available: {note}")
+        if note:
+            logger.info(note)
+
+        llm = create_provider(provider=provider, model=model)
         _engine = DirectEngine(
             search_engine=search_engine,
             llm=llm,
