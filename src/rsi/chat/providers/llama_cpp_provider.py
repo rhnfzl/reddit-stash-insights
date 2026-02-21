@@ -17,14 +17,27 @@ class LlamaCppProvider:
         temperature: float = 0.3,
         max_tokens: int = 512,
     ):
+        import os
+        import sys
+
         from llama_cpp import Llama
 
-        self._llm = Llama(
-            model_path=model,
-            n_ctx=n_ctx,
-            n_gpu_layers=n_gpu_layers,
-            verbose=False,
-        )
+        # Suppress C-level ggml_metal_init "skipping kernel" messages on stderr
+        stderr_fd = sys.stderr.fileno()
+        old_stderr = os.dup(stderr_fd)
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, stderr_fd)
+        try:
+            self._llm = Llama(
+                model_path=model,
+                n_ctx=n_ctx,
+                n_gpu_layers=n_gpu_layers,
+                verbose=False,
+            )
+        finally:
+            os.dup2(old_stderr, stderr_fd)
+            os.close(old_stderr)
+            os.close(devnull)
         self._n_ctx = n_ctx
         self._temperature = temperature
         self._max_tokens = max_tokens
