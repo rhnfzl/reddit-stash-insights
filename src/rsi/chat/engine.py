@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
 
 from rsi.chat.history import ChatHistory
 from rsi.chat.prompt import build_messages
 from rsi.chat.providers.base import LLMProvider
-from rsi.indexer.search import SearchEngine, SearchMode
+
+if TYPE_CHECKING:
+    from rsi.indexer.search import SearchEngine, SearchMode
 
 
 @dataclass
@@ -25,9 +27,12 @@ class DirectEngine:
         self,
         search_engine: SearchEngine,
         llm: LLMProvider,
-        search_mode: SearchMode = SearchMode.HYBRID,
+        search_mode: SearchMode | None = None,
         max_history_turns: int = 10,
     ):
+        if search_mode is None:
+            from rsi.indexer.search import SearchMode
+            search_mode = SearchMode.HYBRID
         self._search = search_engine
         self._llm = llm
         self._search_mode = search_mode

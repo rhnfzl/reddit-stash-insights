@@ -9,6 +9,12 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
+try:
+    import lancedb  # noqa: F401
+    HAS_SEARCH_DEPS = True
+except ImportError:
+    HAS_SEARCH_DEPS = False
+
 
 class TestChatConfigDefaults(unittest.TestCase):
     """Test chat-specific settings in config.py."""
@@ -267,6 +273,7 @@ class TestChatCommandREPL(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, msg=result.output)
 
 
+@unittest.skipUnless(HAS_SEARCH_DEPS, "requires search dependencies (lancedb)")
 class TestBuildChatEngine(unittest.TestCase):
     """Test the _build_chat_engine helper (integration of components)."""
 
