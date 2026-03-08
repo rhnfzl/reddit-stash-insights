@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import typer
+
+if TYPE_CHECKING:
+    from rsi.chat.engine import DirectEngine
 
 from rsi import __version__
 
@@ -155,7 +158,7 @@ def _build_chat_engine(
     db_path: Path,
     mode: str,
     max_history: int,
-) -> "DirectEngine":  # noqa: F821 — forward ref resolved at runtime
+) -> DirectEngine:  # noqa: F821
     """Construct a :class:`DirectEngine` from CLI / config parameters."""
     from rsi.chat.engine import DirectEngine
     from rsi.chat.providers.availability import find_available_provider
@@ -165,6 +168,7 @@ def _build_chat_engine(
     resolved_provider, resolved_model, note = find_available_provider(provider, model)
     if resolved_provider is None:
         raise RuntimeError(f"No LLM provider available: {note}")
+    assert resolved_model is not None  # guaranteed when provider is not None
     if note:
         typer.echo(note)
     search_engine = SearchEngine(db_path=db_path)
@@ -200,7 +204,7 @@ Commands:
 """
 
 
-def _run_repl(engine: "DirectEngine", *, limit: int, stream: bool) -> None:  # noqa: F821
+def _run_repl(engine: DirectEngine, *, limit: int, stream: bool) -> None:  # noqa: F821
     """Interactive read-eval-print loop."""
     typer.echo("rsi chat  --  type /help for commands, /quit to exit\n")
 
@@ -247,7 +251,7 @@ def _run_repl(engine: "DirectEngine", *, limit: int, stream: bool) -> None:  # n
             typer.echo()
 
 
-def _stream_answer(engine: "DirectEngine", query: str, *, limit: int) -> None:  # noqa: F821
+def _stream_answer(engine: DirectEngine, query: str, *, limit: int) -> None:  # noqa: F821
     """Stream tokens to stdout, then print sources."""
     token_iter, sources = engine.chat_stream(query, limit=limit)
     typer.echo()

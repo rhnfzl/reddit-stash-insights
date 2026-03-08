@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +36,7 @@ class LLMProvider(Protocol):
         ...
 
 
-def create_provider(provider: str, model: str, **kwargs: object) -> LLMProvider:
+def create_provider(provider: str, model: str, **kwargs: Any) -> LLMProvider:
     """Instantiate an :class:`LLMProvider` by name.
 
     Parameters
@@ -56,18 +56,15 @@ def create_provider(provider: str, model: str, **kwargs: object) -> LLMProvider:
     name = provider.lower().strip()
 
     if name == "llama-cpp":
-        from rsi.chat.providers.llama_cpp_provider import LlamaCppProvider  # type: ignore[import-not-found]
-
+        from rsi.chat.providers.llama_cpp_provider import LlamaCppProvider
         return LlamaCppProvider(model=model, **kwargs)
 
     if name == "ollama":
-        from rsi.chat.providers.ollama_provider import OllamaProvider  # type: ignore[import-not-found]
-
+        from rsi.chat.providers.ollama_provider import OllamaProvider
         return OllamaProvider(model=model, **kwargs)
 
     if name == "openai":
-        from rsi.chat.providers.openai_provider import OpenAIProvider  # type: ignore[import-not-found]
-
+        from rsi.chat.providers.openai_provider import OpenAIProvider
         return OpenAIProvider(model=model, **kwargs)
 
     msg = f"Unknown LLM provider: {provider!r}. Supported: 'llama-cpp', 'ollama', 'openai'."

@@ -12,7 +12,8 @@ FileLog = Dict[str, FileLogEntry]
 def read_file_log(path: Path) -> FileLog:
     """Read file_log.json and return all entries."""
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        result: FileLog = json.load(f)
+        return result
 
 
 def get_post_entries(log: FileLog) -> FileLog:

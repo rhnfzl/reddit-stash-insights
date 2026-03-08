@@ -53,7 +53,8 @@ class VectorStore:
         q = self._table.search(query_vector).limit(limit)
         if subreddit:
             q = q.where(f"subreddit = '{subreddit}'")
-        return q.to_list()
+        result: list[dict[str, Any]] = q.to_list()
+        return result
 
     def fts_search(
         self,
@@ -67,7 +68,8 @@ class VectorStore:
         q = self._table.search(query, query_type="fts").limit(limit)
         if subreddit:
             q = q.where(f"subreddit = '{subreddit}'")
-        return q.to_list()
+        result: list[dict[str, Any]] = q.to_list()
+        return result
 
     def hybrid_search(
         self,
@@ -97,10 +99,12 @@ class VectorStore:
         )
         if subreddit:
             q = q.where(f"subreddit = '{subreddit}'")
-        return q.to_list()
+        result: list[dict[str, Any]] = q.to_list()
+        return result
 
     def count(self) -> int:
         """Return the number of records in the store."""
         if self._table is None:
             return 0
-        return self._table.count_rows()
+        count: int = self._table.count_rows()
+        return count

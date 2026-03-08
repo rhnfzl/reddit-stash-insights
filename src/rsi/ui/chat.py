@@ -37,7 +37,8 @@ def _load_settings() -> Settings:
     """Load settings once per session."""
     if "settings" not in st.session_state:
         st.session_state.settings = Settings.load()
-    return st.session_state.settings
+    result: Settings = st.session_state.settings
+    return result
 
 
 def _get_engine(provider: str, model: str, search_mode: str, max_history: int, db_path: Path):
@@ -54,8 +55,9 @@ def _get_engine(provider: str, model: str, search_mode: str, max_history: int, d
     st.session_state.provider_note = note
 
     if actual_provider is None:
-        # No provider available at all — raise so the caller can display the error.
+        # No provider available at all - raise so the caller can display the error.
         raise ConnectionError(note)
+    assert actual_model is not None  # guaranteed when provider is not None
 
     cache_key = (actual_provider, actual_model, search_mode, max_history, str(db_path))
     if st.session_state.get("engine_key") != cache_key:

@@ -50,6 +50,9 @@ all = [
 ]
 dev = [
     "ruff>=0.15",
+    "mypy>=1.10",
+    "types-PyYAML>=6.0",
+    "types-requests>=2.31",
     "nox>=2026.2",
 ]
 
@@ -67,3 +70,18 @@ packages = ["src/rsi"]
 [tool.ruff]
 target-version = "py311"
 line-length = 120
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+
+# Modules with heavy third-party type issues (llama-cpp, openai SDK typestubs)
+[[tool.mypy.overrides]]
+module = [
+    "rsi.chat.providers.llama_cpp_provider",
+    "rsi.chat.providers.openai_provider",
+]
+ignore_errors = true

@@ -32,9 +32,16 @@ jobs:
       - name: Lint
         run: ruff check src/ tests/
 
+      - name: Type check
+        run: mypy src/rsi/
+
       - name: Run core tests
         run: |
           python -m unittest tests.test_models tests.test_parser tests.test_scanner tests.test_cli tests.test_config tests.test_s3_fetch -v
+
+      - name: Run chat tests
+        run: |
+          python -m unittest tests.test_chat_providers tests.test_chat_engine tests.test_cli_chat -v
 
   search-tests:
     name: Search (py${{ matrix.python-version }})

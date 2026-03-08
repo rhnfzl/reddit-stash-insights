@@ -33,6 +33,7 @@ def _get_engine() -> DirectEngine:
         provider, model, note = find_available_provider(settings.llm_provider, settings.llm_model)
         if provider is None:
             raise RuntimeError(f"No LLM provider available: {note}")
+        assert model is not None  # guaranteed when provider is not None
         if note:
             logger.info(note)
 

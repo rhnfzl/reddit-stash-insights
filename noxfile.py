@@ -20,6 +20,9 @@ CORE_TESTS = [
     "tests.test_cli",
     "tests.test_config",
     "tests.test_s3_fetch",
+    "tests.test_chat_providers",
+    "tests.test_chat_engine",
+    "tests.test_cli_chat",
 ]
 SEARCH_TESTS = [
     "tests.test_embedder",

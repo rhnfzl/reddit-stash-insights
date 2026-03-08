@@ -42,7 +42,8 @@ class OllamaProvider:
             json=self._build_payload(messages, stream=False),
         )
         response.raise_for_status()
-        return response.json()["message"]["content"]
+        content: str = response.json()["message"]["content"]
+        return content
 
     def stream(self, messages: list[ChatMessage]) -> Iterator[str]:
         """Yield response tokens incrementally."""
