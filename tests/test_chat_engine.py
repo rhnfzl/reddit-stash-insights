@@ -154,6 +154,7 @@ class TestDirectEngine(unittest.TestCase):
         engine = DirectEngine(
             search_engine=mock_search,
             llm=mock_llm,
+            search_mode=MagicMock(),  # sentinel; avoids importing lancedb
         )
         return engine, mock_search, mock_llm
 
