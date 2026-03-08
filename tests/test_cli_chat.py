@@ -147,7 +147,7 @@ class TestChatCommandSingleTurn(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, msg=result.output)
         mock_build.assert_called_once()
         call_kwargs = mock_build.call_args
-        # _build_chat_engine(provider, model, db_path, mode, max_history, context_docs)
+        # _build_chat_engine(provider, model, db_path, mode, max_history)
         self.assertEqual(call_kwargs[1]["provider"], "openai")
         self.assertEqual(call_kwargs[1]["model"], "gpt-4o")
 
@@ -270,9 +270,10 @@ class TestChatCommandREPL(unittest.TestCase):
 class TestBuildChatEngine(unittest.TestCase):
     """Test the _build_chat_engine helper (integration of components)."""
 
+    @patch("rsi.chat.providers.availability.find_available_provider", return_value=("ollama", "qwen2.5:7b", None))
     @patch("rsi.chat.providers.base.create_provider")
     @patch("rsi.indexer.search.SearchEngine")
-    def test_build_creates_direct_engine(self, mock_search_cls, mock_create):
+    def test_build_creates_direct_engine(self, mock_search_cls, mock_create, _mock_find):
         from rsi.cli import _build_chat_engine
 
         mock_search_cls.return_value = MagicMock()
@@ -284,7 +285,6 @@ class TestBuildChatEngine(unittest.TestCase):
             db_path=Path("/tmp/test.lance"),
             mode="hybrid",
             max_history=10,
-            context_docs=5,
         )
 
         mock_search_cls.assert_called_once_with(db_path=Path("/tmp/test.lance"))
@@ -294,9 +294,10 @@ class TestBuildChatEngine(unittest.TestCase):
         from rsi.chat.engine import DirectEngine
         self.assertIsInstance(engine, DirectEngine)
 
+    @patch("rsi.chat.providers.availability.find_available_provider", return_value=("ollama", "test", None))
     @patch("rsi.chat.providers.base.create_provider")
     @patch("rsi.indexer.search.SearchEngine")
-    def test_build_passes_search_mode(self, mock_search_cls, mock_create):
+    def test_build_passes_search_mode(self, mock_search_cls, mock_create, _mock_find):
         from rsi.cli import _build_chat_engine
 
         mock_search_cls.return_value = MagicMock()
@@ -308,7 +309,6 @@ class TestBuildChatEngine(unittest.TestCase):
             db_path=Path("/tmp/test.lance"),
             mode="semantic",
             max_history=5,
-            context_docs=3,
         )
 
         from rsi.indexer.search import SearchMode

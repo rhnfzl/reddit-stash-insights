@@ -134,9 +134,6 @@ def _resolve_gguf_path(model: str) -> str | None:
         # Sort for deterministic results.
         for gguf in sorted(_MODELS_DIR.glob("*.gguf")):
             return str(gguf)
-        # Also check split GGUF (e.g. model-00001-of-00003.gguf)
-        for gguf in sorted(_MODELS_DIR.glob("*-00001-of-*.gguf")):
-            return str(gguf)
     return None
 
 

@@ -26,8 +26,8 @@ class LlamaCppProvider:
         stderr_fd = sys.stderr.fileno()
         old_stderr = os.dup(stderr_fd)
         devnull = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(devnull, stderr_fd)
         try:
+            os.dup2(devnull, stderr_fd)
             self._llm = Llama(
                 model_path=model,
                 n_ctx=n_ctx,

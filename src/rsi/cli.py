@@ -155,7 +155,6 @@ def _build_chat_engine(
     db_path: Path,
     mode: str,
     max_history: int,
-    context_docs: int,
 ) -> "DirectEngine":  # noqa: F821 — forward ref resolved at runtime
     """Construct a :class:`DirectEngine` from CLI / config parameters."""
     from rsi.chat.engine import DirectEngine
@@ -163,12 +162,12 @@ def _build_chat_engine(
     from rsi.chat.providers.base import create_provider
     from rsi.indexer.search import SearchEngine, SearchMode
 
-    search_engine = SearchEngine(db_path=db_path)
     resolved_provider, resolved_model, note = find_available_provider(provider, model)
     if resolved_provider is None:
         raise RuntimeError(f"No LLM provider available: {note}")
     if note:
         typer.echo(note)
+    search_engine = SearchEngine(db_path=db_path)
     llm = create_provider(provider=resolved_provider, model=resolved_model)
     return DirectEngine(
         search_engine=search_engine,
@@ -288,7 +287,6 @@ def chat(
         db_path=_db_path,
         mode=_mode,
         max_history=settings.chat_max_history,
-        context_docs=settings.chat_context_docs,
     )
 
     stream = not no_stream
