@@ -29,7 +29,6 @@ def _get_engine() -> DirectEngine:
         from rsi.indexer.search import SearchEngine, SearchMode
 
         settings = Settings.load()
-        search_engine = SearchEngine(db_path=settings.db_path)
 
         provider, model, note = find_available_provider(settings.llm_provider, settings.llm_model)
         if provider is None:
@@ -37,6 +36,7 @@ def _get_engine() -> DirectEngine:
         if note:
             logger.info(note)
 
+        search_engine = SearchEngine(db_path=settings.db_path)
         llm = create_provider(provider=provider, model=model)
         _engine = DirectEngine(
             search_engine=search_engine,
@@ -134,7 +134,7 @@ async def _handle_reddit_search(arguments: dict[str, Any]) -> list[TextContent]:
     mode_str: str = arguments.get("mode", "hybrid")
 
     engine = _get_engine()
-    results = engine._search.search(query, limit=limit, mode=SearchMode(mode_str))
+    results = engine.search(query, limit=limit, mode=SearchMode(mode_str))
     text = _format_search_results(results)
     return [TextContent(type="text", text=text)]
 

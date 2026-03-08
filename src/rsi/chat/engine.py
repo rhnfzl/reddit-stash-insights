@@ -33,6 +33,10 @@ class DirectEngine:
         self._search_mode = search_mode
         self.history = ChatHistory(max_turns=max_history_turns)
 
+    def search(self, query: str, limit: int = 10, mode: SearchMode | None = None) -> list[dict]:
+        """Search without LLM generation. Returns matching documents."""
+        return self._search.search(query, limit=limit, mode=mode or self._search_mode)
+
     def chat(self, query: str, limit: int = 5) -> ChatResponse:
         docs = self._search.search(query, limit=limit, mode=self._search_mode)
         messages = build_messages(query, docs, self.history.to_messages())
