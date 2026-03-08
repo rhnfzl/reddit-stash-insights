@@ -158,7 +158,7 @@ def _build_chat_engine(
     db_path: Path,
     mode: str,
     max_history: int,
-) -> DirectEngine:  # noqa: F821
+) -> DirectEngine:
     """Construct a :class:`DirectEngine` from CLI / config parameters."""
     from rsi.chat.engine import DirectEngine
     from rsi.chat.providers.availability import find_available_provider
@@ -204,7 +204,7 @@ Commands:
 """
 
 
-def _run_repl(engine: DirectEngine, *, limit: int, stream: bool) -> None:  # noqa: F821
+def _run_repl(engine: DirectEngine, *, limit: int, stream: bool) -> None:
     """Interactive read-eval-print loop."""
     typer.echo("rsi chat  --  type /help for commands, /quit to exit\n")
 
@@ -251,7 +251,7 @@ def _run_repl(engine: DirectEngine, *, limit: int, stream: bool) -> None:  # noq
             typer.echo()
 
 
-def _stream_answer(engine: DirectEngine, query: str, *, limit: int) -> None:  # noqa: F821
+def _stream_answer(engine: DirectEngine, query: str, *, limit: int) -> None:
     """Stream tokens to stdout, then print sources."""
     token_iter, sources = engine.chat_stream(query, limit=limit)
     typer.echo()
