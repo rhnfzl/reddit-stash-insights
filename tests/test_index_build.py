@@ -28,6 +28,7 @@ class FakeEmbedder:
     def __init__(self, provider="openai", model="text-embedding-3-small", forbid=False):
         self.provider, self.model, self.forbid = provider, model, forbid
         self.batches = []
+        self.texts = []
 
     def _vec(self, t):
         return [float((hash(t) >> i) & 0xFF) / 255.0 for i in range(8)]
@@ -36,6 +37,7 @@ class FakeEmbedder:
         if self.forbid:
             raise AssertionError("embedding call not allowed here")
         self.batches.append(len(texts))
+        self.texts.extend(texts)
         return {"dense": [self._vec(t) for t in texts], "sparse": [{} for _ in texts]}
 
     def embed_query(self, q):
@@ -187,6 +189,25 @@ class TestIndexBuild(unittest.TestCase):
         result, _ = self.run_cli(["search", "zebrafish", "--db-path", str(db), "--mode", "keyword"])
         self.assertEqual(result.exit_code, 4, msg=result.output)
         self.assertIn("rebuild", result.output)
+
+    def test_index_caps_text_per_item(self):
+        from rsi.config import Settings
+        from rsi.indexer.search import SearchEngine
+
+        reddit = make_reddit_dir(self.root)
+        db = self.root / "db"
+        result, emb = self.run_cli(["index", str(reddit), "--db-path", str(db)], env={"RSI_MAX_TEXT_CHARS": "12"})
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+        self.assertTrue(emb.texts and all(len(t) <= 12 for t in emb.texts))
+        stored = SearchEngine(db, embedder=FakeEmbedder(), settings=Settings()).store.sample_texts(50)
+        self.assertTrue(stored and all(len(t) <= 12 for t in stored))
+
+    def test_max_text_chars_must_be_positive(self):
+        from rsi.config import Settings
+
+        with patch.dict(os.environ, {"RSI_MAX_TEXT_CHARS": "0"}):
+            with self.assertRaises(ValueError):
+                Settings.load()
 
     def test_health_keyword_ok_without_embedding_call(self):
         reddit = make_reddit_dir(self.root)

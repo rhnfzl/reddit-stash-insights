@@ -110,7 +110,7 @@ def index(
     metadata = []
 
     for post in scan_result.posts:
-        texts.append(post.search_text())
+        texts.append(post.search_text()[:settings.max_text_chars])
         ids.append(post.id)
         metadata.append({
             "subreddit": post.subreddit,
@@ -122,7 +122,7 @@ def index(
         })
 
     for comment in scan_result.comments:
-        texts.append(comment.search_text())
+        texts.append(comment.search_text()[:settings.max_text_chars])
         ids.append(comment.id)
         metadata.append({
             "subreddit": comment.subreddit,
@@ -132,6 +132,8 @@ def index(
             "content_type": "comment",
             "source": comment.source,
         })
+
+    del scan_result  # the parsed bodies are no longer needed; free them before embedding
 
     provider, model = engine.embedder_identity()
     if provider == "local":
