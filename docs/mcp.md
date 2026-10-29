@@ -93,6 +93,52 @@ Add to your project's `.claude/settings.json` or global settings:
 
 Note: Claude Code inherits your shell PATH, so the short `rsi` command works (no absolute path needed).
 
+## Remote server: Streamable HTTP
+
+`rsi mcp --transport http` serves the same tools over Streamable HTTP (responses as SSE) for clients on other machines.
+
+| Path | Auth | Purpose |
+|------|------|---------|
+| `POST /mcp` | `Authorization: Bearer $RSI_MCP_TOKEN` | MCP endpoint (exact path; `/mcp/` redirects) |
+| `GET /healthz` | none | Liveness probe, returns `{"status": "ok"}` |
+
+```bash
+export RSI_MCP_TOKEN="$(openssl rand -hex 32)"   # required; the server refuses to start without it
+rsi mcp --transport http --host 0.0.0.0 --port 8765
+```
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `RSI_MCP_TOKEN` | *(required)* | Bearer token checked on every path except `/healthz` |
+| `RSI_MCP_ALLOWED_HOSTS` | *(none: no Host check)* | Comma-separated `Host` values to accept (DNS rebinding protection) |
+| `RSI_FORWARDED_ALLOW_IPS` | *(none: proxy headers ignored)* | Comma-separated reverse proxy IPs whose `X-Forwarded-*` headers are trusted |
+
+The index is opened once at startup; a missing, empty, or mismatched index (see `rsi health`) stops the server
+with a non-zero exit. `reddit_search` never needs a chat LLM. `reddit_chat` builds a fresh engine per call (no
+history shared between clients) and returns a plain error message when no LLM provider is available. Tool `limit`
+is clamped to 1..50.
+
+Client example (any client that supports Streamable HTTP with headers):
+
+```json
+{"type": "http", "url": "https://rsi.example.com/mcp", "headers": {"Authorization": "Bearer <token>"}}
+```
+
+### Container image
+
+`ghcr.io/rhnfzl/reddit-stash-insights` (tags `latest`, `sha-<commit>`) runs the HTTP server by default and uses an
+OpenAI-compatible embeddings API (no local model). Its defaults are `RSI_EMBEDDING_PROVIDER=openai`,
+`RSI_LLM_PROVIDER=openai`, `RSI_LLM_MODEL=gpt-4o-mini` and `RSI_DB_PATH=/data/index`; override `RSI_LLM_MODEL`
+when `OPENAI_BASE_URL` points at another server. See [configuration.md](configuration.md#embedding-providers).
+The archive directory is a positional argument to `rsi index`, and the database is chosen with `--db-path`
+(or `RSI_DB_PATH`); `tests/test_deploy_contract.py` runs these deployment commands against a fixture.
+
+```bash
+docker run --rm -v ./rsi-data:/data -v ./reddit:/src:ro -e OPENAI_API_KEY ghcr.io/rhnfzl/reddit-stash-insights \
+  index /src --db-path /data/index --rebuild --max-error-pct 1
+docker run -d -p 8765:8765 -v ./rsi-data:/data -e RSI_MCP_TOKEN -e OPENAI_API_KEY ghcr.io/rhnfzl/reddit-stash-insights
+```
+
 ## Available Tools
 
 ### `reddit_search`

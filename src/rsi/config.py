@@ -34,8 +34,14 @@ class Settings:
     """Application settings — all model names and paths are configurable."""
 
     # Embedding
+    embedding_provider: str = "local"  # local (BGE-M3 in process) or openai (OpenAI-compatible API)
     embedding_model: str = "BAAI/bge-m3"
     embedding_use_fp16: bool = True
+    embedding_base_url: Optional[str] = None  # openai provider only; None = SDK default / OPENAI_BASE_URL
+    embedding_batch_size: int = 128  # max inputs per embeddings request (openai)
+    embedding_max_input_tokens: int = 8000  # per-input cap, below the 8191-token model limit (openai)
+    embedding_max_batch_tokens: int = 250_000  # per-request cap, below the 300k API limit (openai)
+    index_chunk_size: int = 512  # items embedded and inserted per chunk while indexing
 
     # Vector store
     db_path: Path = field(default_factory=lambda: DEFAULT_DB_PATH)
@@ -68,6 +74,8 @@ class Settings:
             embed = data.get("embedding", {})
             settings.embedding_model = embed.get("model", settings.embedding_model)
             settings.embedding_use_fp16 = embed.get("use_fp16", settings.embedding_use_fp16)
+            settings.embedding_provider = embed.get("provider", settings.embedding_provider)
+            settings.embedding_base_url = embed.get("base_url", settings.embedding_base_url)
 
             store = data.get("store", {})
             if "db_path" in store:
@@ -91,6 +99,14 @@ class Settings:
         # Environment variable overrides (highest precedence)
         if v := os.environ.get("RSI_EMBEDDING_MODEL"):
             settings.embedding_model = v
+        if v := os.environ.get("RSI_EMBEDDING_PROVIDER"):
+            settings.embedding_provider = v
+        if v := os.environ.get("RSI_EMBEDDING_BASE_URL"):
+            settings.embedding_base_url = v
+        if v := os.environ.get("RSI_EMBEDDING_BATCH"):
+            settings.embedding_batch_size = int(v)
+        if v := os.environ.get("RSI_INDEX_CHUNK"):
+            settings.index_chunk_size = int(v)
         if v := os.environ.get("RSI_DB_PATH"):
             settings.db_path = Path(v)
         if v := os.environ.get("RSI_LLM_PROVIDER"):
@@ -105,6 +121,14 @@ class Settings:
             settings.s3_bucket = v
         if v := os.environ.get("RSI_S3_PREFIX"):
             settings.s3_prefix = v
+
+        if settings.index_chunk_size < 1:
+            raise ValueError(f"RSI_INDEX_CHUNK must be positive, got {settings.index_chunk_size}")
+        if settings.embedding_provider not in ("local", "openai"):
+            raise ValueError(f"embedding provider must be 'local' or 'openai', got {settings.embedding_provider!r}")
+        # The local default model name means nothing to an OpenAI-compatible API.
+        if settings.embedding_provider == "openai" and settings.embedding_model == "BAAI/bge-m3":
+            settings.embedding_model = "text-embedding-3-small"
 
         # Ensure directories exist
         settings.db_path.parent.mkdir(parents=True, exist_ok=True)
