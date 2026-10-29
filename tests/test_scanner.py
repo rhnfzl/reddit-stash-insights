@@ -3,6 +3,8 @@ import unittest
 import tempfile
 from pathlib import Path
 
+from rsi.core.scanner import scan_directory
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -189,9 +191,6 @@ class TestScannerAllFileTypes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-from rsi.core.scanner import scan_directory
 
 
 class TestScannerReviewFixes(unittest.TestCase):

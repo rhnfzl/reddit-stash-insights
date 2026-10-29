@@ -183,7 +183,7 @@ def _frontmatter(content: str) -> dict | None:
 def _parse_frontmatter_comment(file_path: Path, subreddit: str, content: str, fm: dict) -> Comment:
     """Comment with frontmatter: id, author, body, score, permalink (GDPR CSV-only: id, title, permalink)."""
     # CSV-only GDPR files have no body field; the markdown after the frontmatter is all there is
-    body = str(fm.get("body") or "").strip() or split_frontmatter(content)[1].strip()
+    body = str(fm.get("body") or "").strip() or (split_frontmatter(content) or ("", ""))[1].strip()
     title_match = re.search(r"\*\*Title:\*\*\s*(.+)", content)
     try:
         score = int(fm.get("score") or 0)
