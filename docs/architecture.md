@@ -53,7 +53,7 @@ reddit-stash-insights is organized in four layers, each depending only on the la
 Markdown files (from reddit-stash)
         │
         ▼
-    Scanner ─── walks directory, finds POST_*.md / COMMENT_*.md
+    Scanner ─── walks directory, finds every {TYPE}_{id}.md (own, SAVED_, UPVOTE_, GDPR_)
         │
         ▼
     Parser ─── extracts YAML frontmatter + body → RedditPost / RedditComment

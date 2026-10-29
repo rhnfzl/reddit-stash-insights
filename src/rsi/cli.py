@@ -92,6 +92,7 @@ def index(
             "timestamp": str(post.timestamp or ""),
             "file_path": post.file_path,
             "content_type": "post",
+            "source": post.source,
         })
 
     for comment in scan_result.comments:
@@ -103,6 +104,7 @@ def index(
             "timestamp": str(comment.timestamp or ""),
             "file_path": comment.file_path,
             "content_type": "comment",
+            "source": comment.source,
         })
 
     typer.echo(f"Embedding {len(texts)} items...")

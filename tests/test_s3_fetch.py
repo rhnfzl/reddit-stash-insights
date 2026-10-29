@@ -76,6 +76,33 @@ class TestS3Fetch(unittest.TestCase):
             # Should NOT have called download since file exists with same size
             mock_client.download_file.assert_not_called()
 
+    def test_fetch_skips_dot_dirs(self):
+        """reddit-stash's .reddit-stash/control/lock.json and other dot paths are never fetched."""
+        from rsi.core.s3_fetch import fetch_from_s3
+
+        mock_boto3 = MagicMock()
+        mock_client = MagicMock()
+        mock_boto3.client.return_value = mock_client
+        mock_client.get_paginator.return_value.paginate.return_value = [
+            {"Contents": [
+                {"Key": "reddit/.reddit-stash/control/lock.json", "Size": 10},
+                {"Key": "reddit/Python/.hidden.md", "Size": 10},
+            ]},
+            {"Contents": [
+                {"Key": "reddit/file_log.json", "Size": 10},
+                {"Key": "reddit/Python/SAVED_POST_abc.md", "Size": 10},
+            ]},
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            with patch.dict(sys.modules, {"boto3": mock_boto3}):
+                fetch_from_s3("my-bucket", prefix="reddit/", cache_dir=cache_dir)
+
+            fetched = [c.args[1] for c in mock_client.download_file.call_args_list]
+            self.assertEqual(fetched, ["reddit/file_log.json", "reddit/Python/SAVED_POST_abc.md"])
+            self.assertFalse((cache_dir / "reddit" / ".reddit-stash").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
