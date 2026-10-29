@@ -42,6 +42,24 @@ rsi chat "what are my most saved topics?"   # Single question
 rsi chat                                     # Interactive REPL
 ```
 
+## Getting Your Archive
+
+reddit-stash saves to Dropbox, to S3 (under the `reddit/` prefix) or to a local folder. `rsi` needs a local copy:
+
+```bash
+rsi index ~/reddit                              # Local reddit-stash output
+rsi index ~/reddit --s3-bucket <bucket>         # Fetch s3://<bucket>/reddit/ first, then index
+aws s3 sync s3://<bucket>/reddit/ ./reddit --exclude '.reddit-stash/*'   # Or sync it yourself
+```
+
+Dropbox users can sync or download the reddit-stash folder and point `rsi` at it.
+
+Notes:
+- Every reddit-stash file type is indexed: your own posts and comments (`POST_`, `COMMENT_`), saved (`SAVED_`), upvoted (`UPVOTE_`) and GDPR exports (`GDPR_`). An item that is both saved and upvoted is indexed once.
+- The `.reddit-stash/` folder holds reddit-stash's control files and is skipped.
+- `file_log.json` may contain failure entries without a `type`; these are ignored.
+- `rsi index` appends to the existing index. After upgrading from a version that indexed only `POST_`/`COMMENT_` files, delete the index (`~/.rsi/index/vectors.lance` by default) and run `rsi index` again so saved and upvoted items appear.
+
 ## Installation
 
 ```bash

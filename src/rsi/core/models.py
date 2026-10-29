@@ -21,6 +21,7 @@ class Post:
     flair: Optional[str] = None
     score: int = 0
     comment_count: int = 0
+    source: str = "own"  # own, saved, upvoted or gdpr (from the reddit-stash filename prefix)
 
     def search_text(self) -> str:
         """Text representation for embedding/search. Combines title + body."""
@@ -41,6 +42,7 @@ class Comment:
     timestamp: Optional[datetime] = None
     parent_title: Optional[str] = None
     parent_id: Optional[str] = None
+    source: str = "own"  # own, saved, upvoted or gdpr (from the reddit-stash filename prefix)
 
     def search_text(self) -> str:
         """Text representation for embedding/search. Includes parent title for context."""

@@ -52,6 +52,10 @@ def fetch_from_s3(
 
             # Compute local path relative to prefix
             relative = key[len(prefix):]
+
+            # Skip dot-dirs/files such as reddit-stash's .reddit-stash/control/lock.json
+            if any(part.startswith(".") for part in relative.split("/")):
+                continue
             local_path = local_reddit_dir / relative
             local_path.parent.mkdir(parents=True, exist_ok=True)
 
