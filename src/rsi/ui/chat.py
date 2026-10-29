@@ -65,7 +65,7 @@ def _get_engine(provider: str, model: str, search_mode: str, max_history: int, d
         from rsi.chat.providers.base import create_provider
         from rsi.indexer.search import SearchEngine
 
-        search_engine = SearchEngine(db_path=db_path)
+        search_engine = SearchEngine(db_path=db_path, settings=_load_settings())
         llm = create_provider(provider=actual_provider, model=actual_model)
         engine = DirectEngine(
             search_engine=search_engine,

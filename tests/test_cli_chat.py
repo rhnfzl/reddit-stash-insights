@@ -294,7 +294,9 @@ class TestBuildChatEngine(unittest.TestCase):
             max_history=10,
         )
 
-        mock_search_cls.assert_called_once_with(db_path=Path("/tmp/test.lance"))
+        mock_search_cls.assert_called_once()
+        self.assertEqual(mock_search_cls.call_args.kwargs["db_path"], Path("/tmp/test.lance"))
+        self.assertIsNotNone(mock_search_cls.call_args.kwargs["settings"])
         mock_create.assert_called_once_with(provider="ollama", model="qwen2.5:7b")
 
         # Engine should be a DirectEngine

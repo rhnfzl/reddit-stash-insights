@@ -46,17 +46,31 @@ def scan(
         typer.echo(f"  ({len(result.errors)} parse errors)", err=True)
 
 
+# Exit codes shared by index, search and health (2 is typer's usage error).
+EXIT_UNHEALTHY = 1
+EXIT_DATA_GATE = 3
+EXIT_MISMATCH = 4
+
+
 @app.command()
 def index(
     reddit_dir: Path = typer.Argument(..., help="Path to reddit-stash output directory", exists=True),
-    db_path: Optional[Path] = typer.Option(None, "--db-path", help="Path for vector database"),
+    db_path: Optional[Path] = typer.Option(None, "--db-path", help="Path for vector database (default: RSI_DB_PATH)"),
     s3_bucket: Optional[str] = typer.Option(None, "--s3-bucket", help="S3 bucket containing reddit-stash data"),
     s3_prefix: str = typer.Option("reddit/", "--s3-prefix", help="S3 key prefix for reddit-stash files"),
+    rebuild: bool = typer.Option(False, "--rebuild", help="Drop the existing index first (needed after an embedder change)"),
+    max_error_pct: Optional[float] = typer.Option(
+        None, "--max-error-pct",
+        help="Exit 3 without writing metadata when nothing parses or parse errors exceed this percentage",
+    ),
 ):
     """Build or update the vector search index from reddit-stash content."""
-    from rsi.config import DEFAULT_DB_PATH
+    from rsi.config import Settings
     from rsi.core.scanner import scan_directory
+    from rsi.indexer.index_meta import IndexConfigMismatch, remove_meta, write_meta
     from rsi.indexer.search import SearchEngine
+
+    settings = Settings.load()
 
     # If S3 bucket specified, fetch files first
     if s3_bucket:
@@ -65,19 +79,31 @@ def index(
         reddit_dir = fetch_from_s3(bucket=s3_bucket, prefix=s3_prefix)
         typer.echo(f"Files cached to {reddit_dir}")
 
-    if db_path is None:
-        db_path = DEFAULT_DB_PATH
+    db_path = db_path or settings.db_path
 
     typer.echo(f"Scanning {reddit_dir}...")
     scan_result = scan_directory(reddit_dir)
-    typer.echo(f"Found {len(scan_result.posts)} posts, {len(scan_result.comments)} comments")
+    n_items = len(scan_result.posts) + len(scan_result.comments)
+    n_errors = len(scan_result.errors)
+    typer.echo(f"Found {len(scan_result.posts)} posts, {len(scan_result.comments)} comments, {n_errors} parse errors")
 
-    if not scan_result.posts and not scan_result.comments:
+    if max_error_pct is not None and (n_items == 0 or n_errors * 100 > max_error_pct * (n_items + n_errors)):
+        typer.echo(f"Refusing to index: {n_items} items, {n_errors} parse errors (limit {max_error_pct}%)", err=True)
+        raise typer.Exit(EXIT_DATA_GATE)
+
+    if not n_items:
         typer.echo("Nothing to index.")
         raise typer.Exit()
 
-    typer.echo("Loading embedding model (first run downloads ~2GB)...")
-    engine = SearchEngine(db_path=db_path)
+    try:
+        # allow_incomplete: re-running over a crashed build resumes it (rows are upserted).
+        engine = SearchEngine(db_path=db_path, settings=settings, verify=not rebuild, allow_incomplete=True)
+    except IndexConfigMismatch as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(EXIT_MISMATCH)
+    if rebuild:
+        remove_meta(db_path)
+        engine.store.drop()
 
     texts = []
     ids = []
@@ -107,32 +133,46 @@ def index(
             "source": comment.source,
         })
 
-    typer.echo(f"Embedding {len(texts)} items...")
-    engine.index_texts(texts=texts, ids=ids, metadata=metadata)
+    provider, model = engine.embedder_identity()
+    if provider == "local":
+        typer.echo("Loading embedding model (first run downloads ~2GB)...")
+    typer.echo(f"Embedding {len(texts)} items with {provider}/{model}...")
+    # Mark the build unfinished before the first row, so readers refuse it until the final write_meta.
+    write_meta(db_path, provider=provider, model=model, dim=0, rows=0, parse_errors=n_errors, complete=False)
+    dim = engine.index_texts(texts=texts, ids=ids, metadata=metadata)
+    write_meta(db_path, provider=provider, model=model, dim=dim, rows=engine.store.count(), parse_errors=n_errors)
     typer.echo(f"Indexed {len(texts)} items to {db_path}")
 
 
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Search query"),
-    db_path: Optional[Path] = typer.Option(None, "--db-path", help="Path to vector database"),
+    db_path: Optional[Path] = typer.Option(None, "--db-path", help="Path to vector database (default: RSI_DB_PATH)"),
     subreddit: Optional[str] = typer.Option(None, "--subreddit", "-s", help="Filter by subreddit"),
     mode: str = typer.Option("hybrid", "--mode", "-m", help="Search mode: hybrid, semantic, keyword"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results"),
 ):
     """Search your indexed reddit-stash content."""
-    from rsi.config import DEFAULT_DB_PATH
+    from rsi.config import Settings
+    from rsi.indexer.index_meta import IndexConfigMismatch, IndexIncomplete
     from rsi.indexer.search import SearchEngine, SearchMode
 
-    if db_path is None:
-        db_path = DEFAULT_DB_PATH
+    settings = Settings.load()
+    db_path = db_path or settings.db_path
 
     if not db_path.exists():
         typer.echo("No index found. Run 'rsi index' first. 0 results found.")
-        raise typer.Exit()
+        raise typer.Exit(EXIT_UNHEALTHY)
 
     search_mode = SearchMode(mode)
-    engine = SearchEngine(db_path=db_path)
+    try:
+        engine = SearchEngine(db_path=db_path, settings=settings)
+    except IndexConfigMismatch as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(EXIT_MISMATCH)
+    except IndexIncomplete as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(EXIT_UNHEALTHY)
     results = engine.search(query, limit=limit, mode=search_mode, subreddit=subreddit)
 
     if not results:
@@ -147,6 +187,58 @@ def search(
         typer.echo(f"  {i}. [r/{sub}] (score: {score}) {text_preview}")
         typer.echo(f"     File: {r.get('file_path', '?')}")
         typer.echo()
+
+
+@app.command()
+def health(
+    db_path: Optional[Path] = typer.Option(None, "--db-path", help="Path to vector database (default: RSI_DB_PATH)"),
+    mode: str = typer.Option("keyword", "--mode", "-m", help="keyword (no embedding call), hybrid or semantic"),
+) -> None:
+    """Self-test an index: exit 0 healthy, 1 unhealthy, 4 built with another embedder."""
+    import re
+
+    from rsi.config import Settings
+    from rsi.indexer.index_meta import IndexConfigMismatch, IndexIncomplete
+    from rsi.indexer.search import SearchEngine, SearchMode
+
+    settings = Settings.load()
+    db_path = db_path or settings.db_path
+    search_mode = SearchMode(mode)
+
+    def unhealthy(reason: str) -> None:
+        typer.echo(f"unhealthy: {reason}", err=True)
+        raise typer.Exit(EXIT_UNHEALTHY)
+
+    if not db_path.exists():
+        unhealthy(f"no index at {db_path}")
+    try:
+        engine = SearchEngine(db_path=db_path, settings=settings)
+    except IndexConfigMismatch as e:
+        typer.echo(f"unhealthy: {e}", err=True)
+        raise typer.Exit(EXIT_MISMATCH)
+    except IndexIncomplete as e:
+        unhealthy(str(e))
+    rows = engine.store.count()
+    if rows == 0:
+        unhealthy(f"index at {db_path} has no rows")
+    # Probe with words taken from stored rows, longest first: the FTS tokenizer drops
+    # stop words (mostly short) and tokens over 40 chars, so a working index has a hit.
+    words = {w for t in engine.store.sample_texts(20) for w in re.findall(r"[^\W_]+", t) if len(w) <= 40}
+    # Try many words: a short sample can be mostly stop words (about, between, through, ...)
+    probes = sorted(words, key=lambda w: (-len(w), w))[:25]
+    if not probes:
+        unhealthy("could not pick a probe word from the index")
+    for word in probes:
+        try:
+            hits = engine.search(word, limit=1, mode=search_mode)
+        except Exception as e:  # any search failure means the server cannot serve
+            unhealthy(f"{mode} search failed: {e}")
+        if hits:
+            break
+    else:
+        unhealthy(f"{mode} search for {probes} returned nothing")
+    provider, model = engine.embedder_identity()
+    typer.echo(f"healthy: {rows} rows, {provider}/{model}, {mode} search ok")
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +257,7 @@ def _build_chat_engine(
     from rsi.chat.engine import DirectEngine
     from rsi.chat.providers.availability import find_available_provider
     from rsi.chat.providers.base import create_provider
+    from rsi.config import Settings
     from rsi.indexer.search import SearchEngine, SearchMode
 
     resolved_provider, resolved_model, note = find_available_provider(provider, model)
@@ -173,7 +266,7 @@ def _build_chat_engine(
     assert resolved_model is not None  # guaranteed when provider is not None
     if note:
         typer.echo(note)
-    search_engine = SearchEngine(db_path=db_path)
+    search_engine = SearchEngine(db_path=db_path, settings=Settings.load())
     llm = create_provider(provider=resolved_provider, model=resolved_model)
     return DirectEngine(
         search_engine=search_engine,
@@ -312,15 +405,29 @@ def chat(
 
 @app.command()
 def mcp(
-    transport: str = typer.Option("stdio", "--transport", "-t", help="Transport: stdio or sse"),
+    transport: str = typer.Option("stdio", "--transport", "-t", help="Transport: stdio or http"),
+    host: str = typer.Option("127.0.0.1", "--host", help="HTTP bind address"),
+    port: int = typer.Option(8765, "--port", help="HTTP port"),
 ) -> None:
-    """Start the MCP server for Claude Code integration."""
-    import asyncio
-
-    from rsi.mcp_server import run_stdio
-
+    """Start the MCP server (stdio for local clients, http for remote clients)."""
     if transport == "stdio":
+        import asyncio
+
+        from rsi.mcp_server import run_stdio
+
         asyncio.run(run_stdio())
+    elif transport == "http":
+        from rsi.indexer.index_meta import IndexConfigMismatch
+        from rsi.mcp_server import run_http
+
+        try:
+            run_http(host=host, port=port)
+        except IndexConfigMismatch as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(EXIT_MISMATCH)
+        except RuntimeError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1)
     else:
-        typer.echo(f"Transport '{transport}' not yet supported. Use 'stdio'.")
+        typer.echo(f"Transport '{transport}' not supported. Use 'stdio' or 'http'.")
         raise typer.Exit(1)

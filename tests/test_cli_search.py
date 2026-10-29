@@ -42,6 +42,7 @@ class TestSearchCommand(unittest.TestCase):
             db_path = Path(tmpdir) / "nonexistent.lance"
             result = runner.invoke(app, ["search", "test query", "--db-path", str(db_path)])
             self.assertIn("0 results", result.output.lower())
+            self.assertEqual(result.exit_code, 1)  # unhealthy, not a completed search
 
 
 if __name__ == "__main__":

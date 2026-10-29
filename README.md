@@ -58,7 +58,7 @@ Notes:
 - Every reddit-stash file type is indexed: your own posts and comments (`POST_`, `COMMENT_`), saved (`SAVED_`), upvoted (`UPVOTE_`) and GDPR exports (`GDPR_`). An item that is both saved and upvoted is indexed once.
 - The `.reddit-stash/` folder holds reddit-stash's control files and is skipped.
 - `file_log.json` may contain failure entries without a `type`; these are ignored.
-- `rsi index` appends to the existing index. After upgrading from a version that indexed only `POST_`/`COMMENT_` files, delete the index (`~/.rsi/index/vectors.lance` by default) and run `rsi index` again so saved and upvoted items appear.
+- `rsi index` updates the existing index in place (rows are upserted, so re-running never duplicates them). After upgrading from a version that indexed only `POST_`/`COMMENT_` files, delete the index (`~/.rsi/index/vectors.lance` by default) and run `rsi index` again so saved and upvoted items appear.
 
 ## Installation
 

@@ -14,8 +14,10 @@ The default location is `~/.rsi/config.toml`. All sections and keys are optional
 # ~/.rsi/config.toml
 
 [embedding]
-model = "BAAI/bge-m3"       # HuggingFace model ID for embeddings
+provider = "local"           # "local" (BGE-M3 in process) or "openai" (OpenAI-compatible API)
+model = "BAAI/bge-m3"       # HuggingFace model ID, or API model name for "openai"
 use_fp16 = true              # Use FP16 for faster inference (recommended)
+# base_url = "http://localhost:4000/v1"  # "openai" only; defaults to OPENAI_BASE_URL
 
 [store]
 db_path = "~/.rsi/index/vectors.lance"   # LanceDB vector database location
@@ -41,7 +43,12 @@ Each config key has a corresponding environment variable. These take the highest
 
 | Environment Variable | Config Key | Default |
 |---------------------|-----------|---------|
-| `RSI_EMBEDDING_MODEL` | `embedding.model` | `BAAI/bge-m3` |
+| `RSI_EMBEDDING_PROVIDER` | `embedding.provider` | `local` |
+| `RSI_EMBEDDING_MODEL` | `embedding.model` | `BAAI/bge-m3` (`text-embedding-3-small` for `openai`) |
+| `RSI_EMBEDDING_BASE_URL` | `embedding.base_url` | `OPENAI_BASE_URL`, else the OpenAI API |
+| `RSI_EMBEDDING_API_KEY` | *(env only)* | `OPENAI_API_KEY` |
+| `RSI_EMBEDDING_BATCH` | *(env only)* | `128` inputs per embeddings request |
+| `RSI_INDEX_CHUNK` | *(env only)* | `512` items embedded and inserted at a time |
 | `RSI_DB_PATH` | `store.db_path` | `~/.rsi/index/vectors.lance` |
 | `RSI_LLM_PROVIDER` | `llm.provider` | `llama-cpp` |
 | `RSI_LLM_MODEL` | `llm.model` | `qwen2.5:7b` |
@@ -69,6 +76,38 @@ rsi index ~/reddit --s3-bucket $RSI_S3_BUCKET
 |-----|------|---------|-------------|
 | `model` | string | `BAAI/bge-m3` | HuggingFace model ID. BGE-M3 produces 1024-dim dense + sparse vectors for hybrid search. The model (~2GB) downloads automatically on first use. |
 | `use_fp16` | bool | `true` | Use FP16 precision. Faster and uses less memory with negligible quality loss. |
+
+### Embedding providers
+
+`local` needs the `search` extra (torch, BGE-M3). `openai` needs the `embed-openai` extra and calls any
+OpenAI-compatible `/v1/embeddings` endpoint: each input is cut to 8000 tokens with the model tokenizer
+(tiktoken), requests stay under 128 inputs and 250k tokens, and the SDK retries rate limits and server errors.
+Vectors are inserted in chunks of `RSI_INDEX_CHUNK`, so memory does not grow with the archive.
+
+`rsi index` writes `rsi_index.json` inside the database directory twice: with `"complete": false` before the
+first row, and with `"complete": true` last, after every row and the full-text index:
+`{schema, complete, provider, model, dim, rows, parse_errors, built_at}`. Readers (`search`, `chat`, `health`,
+the MCP server, the UI) refuse an unfinished build (exit 1) and an index built with a different provider or
+model (exit 4), and print the command to run. An index without this file is treated as `local`/`BAAI/bge-m3`.
+Switching provider needs `rsi index <dir> --rebuild`.
+
+Rows are upserted on (content type, Reddit id), so running `rsi index` again, or retrying after a failed
+build, never duplicates rows. `RSI_INDEX_CHUNK` must be a positive integer.
+
+### Index and health exit codes
+
+| Code | `rsi index` | `rsi health` / `rsi search` |
+|------|-------------|-----------------------------|
+| 0 | Indexed (or nothing to index without `--max-error-pct`) | Healthy / searched |
+| 1 | Unexpected error (for example the embeddings API failed after retries) | Unhealthy: no index, unfinished build, no rows, or the probe search failed |
+| 2 | Bad arguments | Bad arguments |
+| 3 | `--max-error-pct` gate: zero items or too many parse errors; no metadata written | |
+| 4 | Existing index built with another embedder; rerun with `--rebuild` | Index built with another embedder |
+
+`rsi health [--db-path PATH] [--mode keyword|hybrid|semantic]` searches for words taken from stored rows,
+longest first (up to five tries), so stop words and over-long tokens do not fail a valid index.
+The default `keyword` mode makes no embedding call, so it works as a container healthcheck during an
+embeddings API outage.
 
 ### `[store]`
 
