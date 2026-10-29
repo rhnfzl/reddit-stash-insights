@@ -42,6 +42,9 @@ class Settings:
     embedding_max_input_tokens: int = 8000  # per-input cap, below the 8191-token model limit (openai)
     embedding_max_batch_tokens: int = 250_000  # per-request cap, below the 300k API limit (openai)
     index_chunk_size: int = 512  # items embedded and inserted per chunk while indexing
+    # Characters of each item kept for indexing; embedding models read about 32k anyway,
+    # and long comment threads otherwise keep the whole archive in memory several times.
+    max_text_chars: int = 32_000
 
     # Vector store
     db_path: Path = field(default_factory=lambda: DEFAULT_DB_PATH)
@@ -107,6 +110,8 @@ class Settings:
             settings.embedding_batch_size = int(v)
         if v := os.environ.get("RSI_INDEX_CHUNK"):
             settings.index_chunk_size = int(v)
+        if v := os.environ.get("RSI_MAX_TEXT_CHARS"):
+            settings.max_text_chars = int(v)
         if v := os.environ.get("RSI_DB_PATH"):
             settings.db_path = Path(v)
         if v := os.environ.get("RSI_LLM_PROVIDER"):
@@ -124,6 +129,8 @@ class Settings:
 
         if settings.index_chunk_size < 1:
             raise ValueError(f"RSI_INDEX_CHUNK must be positive, got {settings.index_chunk_size}")
+        if settings.max_text_chars < 1:
+            raise ValueError(f"RSI_MAX_TEXT_CHARS must be positive, got {settings.max_text_chars}")
         if settings.embedding_provider not in ("local", "openai"):
             raise ValueError(f"embedding provider must be 'local' or 'openai', got {settings.embedding_provider!r}")
         # The local default model name means nothing to an OpenAI-compatible API.

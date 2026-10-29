@@ -22,12 +22,23 @@ POST = (
 )
 
 
+
+def _meta(db: Path) -> dict:
+    """read_meta for tests: fail loudly when the metadata file is missing."""
+    from rsi.indexer.index_meta import read_meta
+
+    meta = read_meta(db)
+    assert meta is not None, f"no index metadata in {db}"
+    return meta
+
+
 class FakeEmbedder:
     """Deterministic 8-dim vectors; counts calls; can refuse to be used at all."""
 
     def __init__(self, provider="openai", model="text-embedding-3-small", forbid=False):
         self.provider, self.model, self.forbid = provider, model, forbid
         self.batches = []
+        self.texts = []
 
     def _vec(self, t):
         return [float((hash(t) >> i) & 0xFF) / 255.0 for i in range(8)]
@@ -36,6 +47,7 @@ class FakeEmbedder:
         if self.forbid:
             raise AssertionError("embedding call not allowed here")
         self.batches.append(len(texts))
+        self.texts.extend(texts)
         return {"dense": [self._vec(t) for t in texts], "sparse": [{} for _ in texts]}
 
     def embed_query(self, q):
@@ -76,7 +88,6 @@ class TestIndexBuild(unittest.TestCase):
             return CliRunner().invoke(app, args), embedder
 
     def test_fresh_openai_build_writes_metadata_last_and_honours_rsi_db_path(self):
-        from rsi.indexer.index_meta import read_meta
 
         reddit = make_reddit_dir(self.root)
         db = self.root / "next"
@@ -84,7 +95,7 @@ class TestIndexBuild(unittest.TestCase):
                                    env={"RSI_DB_PATH": str(db), "RSI_INDEX_CHUNK": "2"})
         self.assertEqual(result.exit_code, 0, msg=result.output)
         self.assertEqual(emb.batches, [2, 2, 1])  # bounded chunks
-        meta = read_meta(db)
+        meta = _meta(db)
         self.assertEqual((meta["provider"], meta["model"], meta["dim"], meta["rows"], meta["schema"]),
                          ("openai", "text-embedding-3-small", 8, 5, 1))
 
@@ -178,8 +189,7 @@ class TestIndexBuild(unittest.TestCase):
         self.assertEqual(result.exit_code, 4, msg=result.output)
         result, _ = self.run_cli(["index", str(reddit), "--db-path", str(db), "--rebuild"])
         self.assertEqual(result.exit_code, 0, msg=result.output)
-        from rsi.indexer.index_meta import read_meta
-        self.assertEqual(read_meta(db)["rows"], 5)  # legacy row dropped, not appended to
+        self.assertEqual(_meta(db)["rows"], 5)  # legacy row dropped, not appended to
 
     def test_search_cli_mismatch_exit_4(self):
         db = self.root / "db"
@@ -187,6 +197,25 @@ class TestIndexBuild(unittest.TestCase):
         result, _ = self.run_cli(["search", "zebrafish", "--db-path", str(db), "--mode", "keyword"])
         self.assertEqual(result.exit_code, 4, msg=result.output)
         self.assertIn("rebuild", result.output)
+
+    def test_index_caps_text_per_item(self):
+        from rsi.config import Settings
+        from rsi.indexer.search import SearchEngine
+
+        reddit = make_reddit_dir(self.root)
+        db = self.root / "db"
+        result, emb = self.run_cli(["index", str(reddit), "--db-path", str(db)], env={"RSI_MAX_TEXT_CHARS": "12"})
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+        self.assertTrue(emb.texts and all(len(t) <= 12 for t in emb.texts))
+        stored = SearchEngine(db, embedder=FakeEmbedder(), settings=Settings()).store.sample_texts(50)
+        self.assertTrue(stored and all(len(t) <= 12 for t in stored))
+
+    def test_max_text_chars_must_be_positive(self):
+        from rsi.config import Settings
+
+        with patch.dict(os.environ, {"RSI_MAX_TEXT_CHARS": "0"}):
+            with self.assertRaises(ValueError):
+                Settings.load()
 
     def test_health_keyword_ok_without_embedding_call(self):
         reddit = make_reddit_dir(self.root)
@@ -244,7 +273,6 @@ class TestIndexBuild(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, msg=result.output)
 
     def test_crashed_build_is_rejected_by_readers_and_resumable(self):
-        from rsi.indexer.index_meta import read_meta
 
         reddit = make_reddit_dir(self.root)
         db = self.root / "db"
@@ -260,7 +288,7 @@ class TestIndexBuild(unittest.TestCase):
         result, _ = self.run_cli(["index", str(reddit), "--db-path", str(db)], embedder=FailSecondChunk(),
                                  env={"RSI_INDEX_CHUNK": "2"})
         self.assertNotEqual(result.exit_code, 0)
-        self.assertIs(read_meta(db)["complete"], False)
+        self.assertIs(_meta(db)["complete"], False)
         for args in (["health", "--db-path", str(db)], ["search", "zebrafish", "--db-path", str(db), "-m", "keyword"]):
             result, _ = self.run_cli(args)
             self.assertEqual(result.exit_code, 1, msg=result.output)
@@ -272,7 +300,7 @@ class TestIndexBuild(unittest.TestCase):
         # Retrying without --rebuild finishes the build with no duplicate rows.
         result, _ = self.run_cli(["index", str(reddit), "--db-path", str(db)], env={"RSI_INDEX_CHUNK": "2"})
         self.assertEqual(result.exit_code, 0, msg=result.output)
-        self.assertEqual((read_meta(db)["complete"], read_meta(db)["rows"]), (True, 5))
+        self.assertEqual((_meta(db)["complete"], _meta(db)["rows"]), (True, 5))
         result, _ = self.run_cli(["health", "--db-path", str(db)])
         self.assertEqual(result.exit_code, 0, msg=result.output)
 

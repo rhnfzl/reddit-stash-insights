@@ -49,6 +49,7 @@ Each config key has a corresponding environment variable. These take the highest
 | `RSI_EMBEDDING_API_KEY` | *(env only)* | `OPENAI_API_KEY` |
 | `RSI_EMBEDDING_BATCH` | *(env only)* | `128` inputs per embeddings request |
 | `RSI_INDEX_CHUNK` | *(env only)* | `512` items embedded and inserted at a time |
+| `RSI_MAX_TEXT_CHARS` | *(env only)* | `32000` characters of each item indexed (embedding models read about this much anyway; bounds memory on archives with long threads) |
 | `RSI_DB_PATH` | `store.db_path` | `~/.rsi/index/vectors.lance` |
 | `RSI_LLM_PROVIDER` | `llm.provider` | `llama-cpp` |
 | `RSI_LLM_MODEL` | `llm.model` | `qwen2.5:7b` |
