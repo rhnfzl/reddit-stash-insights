@@ -191,7 +191,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-from rsi.core.scanner import scan_directory  # noqa: E402
+from rsi.core.scanner import scan_directory
 
 
 class TestScannerReviewFixes(unittest.TestCase):
