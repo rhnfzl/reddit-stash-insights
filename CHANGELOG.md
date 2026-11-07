@@ -8,6 +8,7 @@ The first public release also includes a reproducible search evaluation and an i
 - Add `rsi eval` with recall@10, MRR@10 and nDCG@10, raw rankings and input fingerprints.
 - Ship 50 fictional questions, reference answers and relevance labels, plus ten absent-answer controls.
 - Split posts and comments into bounded passages with source offsets and comment references.
+- Preserve full saved comment exports, including parent threads, replies and text by other authors. Reindex existing comment archives to include this context.
 - Remove the indexing character cap and configure embedding input capacity explicitly.
 - Group search results by source thread and preserve subreddit filters in every search mode.
 - Fit chat evidence and history into provider token budgets, with citations for included passages.
@@ -17,4 +18,5 @@ The first public release also includes a reproducible search evaluation and an i
 
 Existing legacy indexes remain readable. Indexing requires a fresh directory or an explicit rebuild.
 A rebuild discards the selected index table. Keep the source archive and back up the existing index first.
+Comment source references follow exported nesting and fallback links; they do not reconstruct a complete comment graph.
 The public fixture checks installation and scoring behavior. It does not establish general search quality.

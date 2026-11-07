@@ -99,6 +99,12 @@ use overlapping windows with the active embedding tokenizer. Unicode characters 
 The 512-token limit includes repeated title and comment context. The indexer retains evidence after
 character 32,000 and writes at most `RSI_INDEX_CHUNK` passage vectors per batch.
 
+Saved comment searches include exported parent threads and replies, including text written by other authors.
+The parser keeps the full rendered export after its first recognized frontmatter block, with `body` as a fallback when rendering is empty.
+Source references follow exported nesting and fallback links. They do not reconstruct a complete comment graph.
+Reindex existing comment archives to recover context omitted by earlier parser versions.
+Use a separate index directory to keep the current index available during validation.
+
 Search returns one best passage per source thread. For the default result limit, it requests 50, 100, then 200 candidates.
 For larger limits, candidate depths are at least the requested limit, twice that limit, then four times that limit.
 Duplicate-heavy rankings can still return fewer source threads than requested. Search limits must be positive integers.
