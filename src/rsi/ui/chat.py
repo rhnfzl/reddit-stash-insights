@@ -48,16 +48,21 @@ def _get_engine(provider: str, model: str, search_mode: str, max_history: int, d
     engine.  Stores a fallback note in ``st.session_state.provider_note`` when
     the selected provider was unavailable.
     """
-    from rsi.chat.providers.availability import find_available_provider
+    from rsi.chat.providers.availability import find_available_provider, provider_destination
 
     # Run availability check / fallback.
-    actual_provider, actual_model, note = find_available_provider(provider, model)
+    actual_provider, actual_model, note = find_available_provider(
+        provider, model, allow_cloud_fallback=_load_settings().allow_cloud_fallback,
+    )
     st.session_state.provider_note = note
 
     if actual_provider is None:
         # No provider available at all - raise so the caller can display the error.
         raise ConnectionError(note)
     assert actual_model is not None  # guaranteed when provider is not None
+    st.caption(f"Chat context destination: {provider_destination(actual_provider)} (model {actual_model})")
+    if note:
+        st.info(note)
 
     cache_key = (actual_provider, actual_model, search_mode, max_history, str(db_path))
     if st.session_state.get("engine_key") != cache_key:

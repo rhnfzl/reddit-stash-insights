@@ -22,14 +22,11 @@ def _patch_transformers_compat() -> None:
     Injecting a no-op stub prevents the ``ImportError`` without affecting
     any functionality we use (we only need the BGEM3FlagModel encoder).
     """
-    try:
-        from transformers.utils.import_utils import is_torch_fx_available  # noqa: F401
-    except ImportError:
-        import transformers.utils.import_utils as _tiu
+    import transformers.utils.import_utils as _tiu
 
-        if not hasattr(_tiu, "is_torch_fx_available"):
-            _tiu.is_torch_fx_available = lambda: False  # type: ignore[attr-defined]
-            logger.debug("Injected is_torch_fx_available shim for transformers compat")
+    if not hasattr(_tiu, "is_torch_fx_available"):
+        setattr(_tiu, "is_torch_fx_available", lambda: False)
+        logger.debug("Injected is_torch_fx_available shim for transformers compat")
 
 
 class Embedder:

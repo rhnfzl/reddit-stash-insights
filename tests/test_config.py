@@ -2,9 +2,49 @@
 import unittest
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
+import os
 
 
 class TestSettings(unittest.TestCase):
+    def test_cloud_fallback_defaults_off(self):
+        from rsi.config import Settings
+
+        self.assertFalse(Settings().allow_cloud_fallback)
+
+    def test_cloud_fallback_config_and_env_override(self):
+        from rsi.config import Settings
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.toml"
+            path.write_text("[llm]\nallow_cloud_fallback = true\n")
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertTrue(Settings.load(path).allow_cloud_fallback)
+            with patch.dict(os.environ, {"RSI_ALLOW_CLOUD_FALLBACK": "false"}):
+                self.assertFalse(Settings.load(path).allow_cloud_fallback)
+
+    def test_cloud_fallback_env_requires_boolean(self):
+        from rsi.config import Settings
+
+        for value in ("true", "false"):
+            with self.subTest(value=value), patch.dict(os.environ, {"RSI_ALLOW_CLOUD_FALLBACK": value}):
+                self.assertEqual(Settings.load(Path("/nonexistent/config.toml")).allow_cloud_fallback, value == "true")
+        for value in ("yes", "1", "", "invalid"):
+            with self.subTest(value=value), patch.dict(os.environ, {"RSI_ALLOW_CLOUD_FALLBACK": value}):
+                with self.assertRaisesRegex(ValueError, "RSI_ALLOW_CLOUD_FALLBACK"):
+                    Settings.load(Path("/nonexistent/config.toml"))
+
+    def test_cloud_fallback_config_requires_boolean(self):
+        from rsi.config import Settings
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.toml"
+            for value in ('"false"', "1"):
+                path.write_text(f"[llm]\nallow_cloud_fallback = {value}\n")
+                with self.subTest(value=value), patch.dict(os.environ, {}, clear=True):
+                    with self.assertRaisesRegex(ValueError, "allow_cloud_fallback"):
+                        Settings.load(path)
+
     def test_default_settings(self):
         from rsi.config import Settings
 

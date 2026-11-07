@@ -25,6 +25,7 @@ db_path = "~/.rsi/index/vectors.lance"   # LanceDB vector database location
 [llm]
 provider = "llama-cpp"       # LLM backend: "llama-cpp", "ollama", or "openai"
 model = "qwen2.5:7b"         # Model name, tag, or path to GGUF file
+allow_cloud_fallback = false # Permit an OpenAI-compatible fallback only after explicit consent
 
 [chat]
 context_docs = 5             # Number of retrieved documents per RAG query
@@ -53,6 +54,7 @@ Each config key has a corresponding environment variable. These take the highest
 | `RSI_DB_PATH` | `store.db_path` | `~/.rsi/index/vectors.lance` |
 | `RSI_LLM_PROVIDER` | `llm.provider` | `llama-cpp` |
 | `RSI_LLM_MODEL` | `llm.model` | `qwen2.5:7b` |
+| `RSI_ALLOW_CLOUD_FALLBACK` | `llm.allow_cloud_fallback` | `false` (accepts only `true` or `false`) |
 | `RSI_CHAT_CONTEXT_DOCS` | `chat.context_docs` | `5` |
 | `RSI_CHAT_SEARCH_MODE` | `chat.search_mode` | `hybrid` |
 | `RSI_S3_BUCKET` | `s3.bucket` | *(none)* |
@@ -122,6 +124,7 @@ embeddings API outage.
 |-----|------|---------|-------------|
 | `provider` | string | `llama-cpp` | LLM backend to use. See [providers.md](providers.md) for setup details. |
 | `model` | string | `qwen2.5:7b` | Interpretation depends on provider: a GGUF file path for `llama-cpp`, a model tag for `ollama`, or a model name for `openai`. |
+| `allow_cloud_fallback` | bool | `false` | Permit an OpenAI-compatible fallback when local providers fail. Explicit `openai` selection permits that endpoint without this setting. |
 
 ### `[chat]`
 

@@ -14,7 +14,7 @@ from rsi import __version__
 
 app = typer.Typer(
     name="rsi",
-    help="Semantic search, knowledge graph, and AI chat for reddit-stash archives.",
+    help="Semantic search and AI chat for reddit-stash archives.",
     no_args_is_help=True,
 )
 
@@ -29,7 +29,7 @@ def version_callback(value: bool):
 def main(
     version: Optional[bool] = typer.Option(None, "--version", callback=version_callback, is_eager=True),
 ):
-    """reddit-stash-insights: search, graph, analytics, and chat for your Reddit archive."""
+    """Search and chat with your Reddit archive."""
     pass
 
 
@@ -257,18 +257,22 @@ def _build_chat_engine(
 ) -> DirectEngine:
     """Construct a :class:`DirectEngine` from CLI / config parameters."""
     from rsi.chat.engine import DirectEngine
-    from rsi.chat.providers.availability import find_available_provider
+    from rsi.chat.providers.availability import find_available_provider, provider_destination
     from rsi.chat.providers.base import create_provider
     from rsi.config import Settings
     from rsi.indexer.search import SearchEngine, SearchMode
 
-    resolved_provider, resolved_model, note = find_available_provider(provider, model)
+    settings = Settings.load()
+    resolved_provider, resolved_model, note = find_available_provider(
+        provider, model, allow_cloud_fallback=settings.allow_cloud_fallback,
+    )
     if resolved_provider is None:
         raise RuntimeError(f"No LLM provider available: {note}")
     assert resolved_model is not None  # guaranteed when provider is not None
     if note:
         typer.echo(note)
-    search_engine = SearchEngine(db_path=db_path, settings=Settings.load())
+    typer.echo(f"Chat context destination: {provider_destination(resolved_provider)} (model {resolved_model})")
+    search_engine = SearchEngine(db_path=db_path, settings=settings)
     llm = create_provider(provider=resolved_provider, model=resolved_model)
     return DirectEngine(
         search_engine=search_engine,

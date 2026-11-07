@@ -307,6 +307,41 @@ class TestCheckProvider(unittest.TestCase):
 class TestFindAvailableProvider(unittest.TestCase):
     """Tests for the fallback logic in find_available_provider."""
 
+    def test_provider_destination_reports_endpoint_without_credentials(self):
+        from rsi.chat.providers.availability import provider_destination
+
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(provider_destination("openai"), "openai at https://api.openai.com/v1")
+            self.assertEqual(provider_destination(" OpEnAI "), "openai at https://api.openai.com/v1")
+        with patch.dict(os.environ, {"OPENAI_BASE_URL": "http://user:password@localhost:1234/v1?key=secret#secret"}):
+            self.assertEqual(provider_destination("openai"), "openai at http://localhost:1234/v1")
+        self.assertEqual(provider_destination("ollama"), "ollama at http://localhost:11434")
+        self.assertEqual(provider_destination("llama-cpp"), "llama-cpp (in process)")
+
+    def test_local_failure_does_not_probe_cloud_without_consent(self):
+        from rsi.chat.providers import availability
+
+        with patch.object(availability, "check_provider", side_effect=lambda p, m: None if p == "openai" else "offline") as check:
+            provider, _, note = availability.find_available_provider("ollama", "test")
+        self.assertIsNone(provider)
+        self.assertNotIn("openai", [call.args[0] for call in check.call_args_list])
+        self.assertIn("cloud fallback disabled", note.lower())
+
+    def test_cloud_fallback_requires_opt_in(self):
+        from rsi.chat.providers import availability
+
+        with patch.object(availability, "check_provider", side_effect=lambda p, m: None if p == "openai" else "offline"):
+            provider, model, note = availability.find_available_provider("ollama", "test", allow_cloud_fallback=True)
+        self.assertEqual((provider, model), ("openai", "test"))
+        self.assertIn("openai", note)
+
+    def test_explicit_cloud_selection_is_supported_without_fallback_consent(self):
+        from rsi.chat.providers import availability
+
+        with patch.object(availability, "check_provider", return_value=None):
+            self.assertEqual(availability.find_available_provider("openai", "test"), ("openai", "test", None))
+
+
     def test_fallback_to_alternative(self):
         """When selected provider is unavailable, falls back to an alternative."""
         from rsi.chat.providers import availability

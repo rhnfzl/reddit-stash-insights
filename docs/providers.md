@@ -1,6 +1,9 @@
 # LLM Provider Setup
 
-reddit-stash-insights supports three LLM providers for RAG chat. Each provider is an optional dependency — install only what you need.
+You can chat with your archive using local models or an OpenAI-compatible API.
+Local provider failure does not permit cloud fallback unless you opt in.
+Each provider has an optional dependency. Install only what you need.
+Use the [source checkout instructions](../README.md#quick-start), then run installation commands from that checkout.
 
 ## Provider Comparison
 
@@ -23,7 +26,7 @@ Best for privacy-first, offline usage. Runs the model directly in-process via [l
 
 ```bash
 # 1. Install the provider
-pip install reddit-stash-insights[search,chat]
+pip install -e ".[search,chat]"
 
 # 2. Download a GGUF model
 pip install huggingface-hub
@@ -31,7 +34,7 @@ huggingface-cli download Qwen/Qwen2.5-7B-Instruct-GGUF \
   qwen2.5-7b-instruct-q4_k_m.gguf \
   --local-dir ~/.rsi/models/
 
-# 3. Configure (optional — auto-detects GGUF files in ~/.rsi/models/)
+# 3. Configure (optional, auto-detects GGUF files in ~/.rsi/models/)
 cat > ~/.rsi/config.toml << 'EOF'
 [llm]
 provider = "llama-cpp"
@@ -60,12 +63,12 @@ Split GGUF files (e.g., `model-00001-of-00003.gguf`) are also detected.
 
 ### Parameters
 
-The llama-cpp provider accepts these constructor parameters (via config or code):
+The llama-cpp provider accepts these constructor parameters in Python code:
 
-- `n_ctx=4096` — context window size
-- `n_gpu_layers=-1` — layers to offload to GPU (-1 = all)
-- `temperature=0.3` — generation temperature
-- `max_tokens=512` — maximum response tokens
+- `n_ctx=4096`: context window size
+- `n_gpu_layers=-1`: layers to offload to GPU (-1 = all)
+- `temperature=0.3`: generation temperature
+- `max_tokens=512`: maximum response tokens
 
 ## Ollama (Local HTTP)
 
@@ -85,7 +88,7 @@ ollama pull qwen2.5:7b
 ollama serve
 
 # 4. Install the provider
-pip install reddit-stash-insights[search,chat-ollama]
+pip install -e ".[search,chat-ollama]"
 
 # 5. Configure
 cat > ~/.rsi/config.toml << 'EOF'
@@ -103,7 +106,8 @@ Check that Ollama is running and the model is available:
 curl http://localhost:11434/api/tags
 ```
 
-The availability checker pings this endpoint before attempting to use Ollama. If the server isn't running, rsi falls back to the next available provider.
+The provider uses `requests` to call the Ollama HTTP API. It does not use the Ollama Python package.
+The availability checker pings this endpoint first. If unavailable, rsi tries the other local provider.
 
 ## OpenAI-Compatible (Cloud / API)
 
@@ -113,7 +117,7 @@ Works with OpenAI, vLLM, LM Studio, and any server that implements the OpenAI ch
 
 ```bash
 # 1. Install the provider
-pip install reddit-stash-insights[search,chat-openai]
+pip install -e ".[search,chat-openai]"
 
 # 2. Set your API key
 export OPENAI_API_KEY=sk-...
@@ -150,13 +154,16 @@ model = "Qwen/Qwen2.5-7B-Instruct"  # Model name as loaded in vLLM
 
 ## Auto-Fallback
 
-When starting a chat session, rsi pre-flights the configured provider to verify it's available. If the selected provider fails, it tries alternatives in this order:
+When chat starts, rsi checks the configured provider first. If unavailable, it tries these alternatives:
 
-1. **llama-cpp** — checks that `llama-cpp-python` is importable and a GGUF file exists
-2. **ollama** — pings `http://localhost:11434/api/tags`
-3. **openai** — checks that the `openai` package is importable and `OPENAI_API_KEY` is set
+1. **llama-cpp:** checks that `llama-cpp-python` is importable and a GGUF file exists.
+2. **ollama:** pings `http://localhost:11434/api/tags`.
+3. **openai:** considered only when cloud fallback is explicitly allowed. Checks the SDK and `OPENAI_API_KEY`.
 
-The fallback is transparent — rsi logs which provider it switched to and why. In the Streamlit UI, a note appears when a fallback provider is used.
+The CLI and UI display the resolved destination and model before generation.
+MCP tool discovery advertises the configured destination and whether cloud fallback is permitted.
+The MCP server logs the resolved destination before each chat call. Clients may not display those logs.
+MCP operators must communicate the configured destinations to users before enabling chat.
 
 ### Example Fallback Scenarios
 
@@ -165,14 +172,19 @@ The fallback is transparent — rsi logs which provider it switched to and why. 
 | `llama-cpp` | No GGUF file in `~/.rsi/models/` | `ollama` (if running) |
 | `ollama` | Ollama server not running | `llama-cpp` (if GGUF available) |
 | `openai` | No API key set | `llama-cpp` (if GGUF available) |
-| `llama-cpp` | Package not installed | `ollama` -> `openai` |
+| `llama-cpp` | Both local providers unavailable | Error, unless cloud fallback is permitted |
 
-### Disabling Fallback
+### Permitting Cloud Fallback
 
-To use a specific provider without fallback, pass `--provider` on the CLI:
+Cloud fallback is disabled by default, including when an API key already exists.
+To permit archive context and conversation history to reach an OpenAI-compatible endpoint, set:
 
-```bash
-rsi chat --provider ollama "my question"
+```toml
+[llm]
+allow_cloud_fallback = true
 ```
 
-The `--provider` flag overrides config but still participates in fallback if unavailable. To force a specific provider (no fallback), ensure only one provider's dependencies are installed.
+Or set `RSI_ALLOW_CLOUD_FALLBACK=true`. Only `true` and `false` are accepted; other values raise an error.
+Selecting `openai` directly also permits that endpoint. `OPENAI_BASE_URL` sets its destination; the default is `https://api.openai.com/v1`.
+The `--provider` flag changes the selected provider. Local fallback still applies if that provider is unavailable.
+This setting controls chat only. An explicit OpenAI embedding provider separately sends indexed text and search queries to its API.

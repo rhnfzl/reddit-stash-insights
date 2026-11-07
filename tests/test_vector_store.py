@@ -5,6 +5,28 @@ from pathlib import Path
 
 
 class TestVectorStore(unittest.TestCase):
+    def test_filter_values_are_literals_in_all_search_modes(self):
+        from rsi.indexer.vector_store import VectorStore
+
+        values = ["ordinary", "reader's", "ordinary' OR 1=1 --", "a\\b", "日本語"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = VectorStore(db_path=Path(tmpdir) / "test.lance")
+            store.add_records([
+                {"id": str(i), "content_type": "post", "subreddit": value,
+                 "text": "shared tutorial", "vector": [0.1] * 4}
+                for i, value in enumerate(values)
+            ])
+            store.create_fts_index()
+            for value in values:
+                searches = {
+                    "semantic": lambda: store.vector_search([0.1] * 4, subreddit=value),
+                    "keyword": lambda: store.fts_search("tutorial", subreddit=value),
+                    "hybrid": lambda: store.hybrid_search("tutorial", [0.1] * 4, subreddit=value),
+                }
+                for mode, search in searches.items():
+                    with self.subTest(value=value, mode=mode):
+                        self.assertEqual([row["subreddit"] for row in search()], [value])
+
     def test_create_and_query_table(self):
         from rsi.indexer.vector_store import VectorStore
 

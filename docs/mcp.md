@@ -4,18 +4,24 @@ reddit-stash-insights includes an [MCP (Model Context Protocol)](https://modelco
 
 ## Prerequisites
 
-1. **Index your archive first** — the MCP server needs an existing search index:
+Follow the [source checkout instructions](../README.md#quick-start) before installing extras.
+
+1. **Index your archive first**, the MCP server needs an existing search index:
    ```bash
-   pip install reddit-stash-insights[search,chat,mcp]
+   pip install -e ".[search,chat,mcp]"
    rsi index ~/reddit
    ```
 
 2. **Have an LLM provider available** (for the `reddit_chat` tool):
    - A GGUF model in `~/.rsi/models/` (auto-detected), or
    - Ollama running locally, or
-   - `OPENAI_API_KEY` set
+   - `openai` selected explicitly with `OPENAI_API_KEY` set
 
    See [providers.md](providers.md) for setup details. The `reddit_search` tool works without an LLM.
+
+Cloud fallback is disabled by default. To permit it, set `[llm].allow_cloud_fallback = true` or `RSI_ALLOW_CLOUD_FALLBACK=true`.
+Tool discovery reports the configured destination and fallback permission. The server logs the resolved destination before generation.
+Tell users which endpoint receives archive context before enabling chat. Hosted embedding settings control archive indexing and query transfers separately.
 
 ## Setup: Claude Desktop App
 
@@ -213,7 +219,7 @@ The MCP server runs as a subprocess managed by Claude. It starts on first use an
 The `reddit_chat` tool needs an LLM. Either:
 - Drop a GGUF file into `~/.rsi/models/`
 - Start Ollama (`ollama serve`)
-- Set `OPENAI_API_KEY` in your environment
+- Select `openai` and set `OPENAI_API_KEY` in your environment
 
 The `reddit_search` tool works without any LLM.
 

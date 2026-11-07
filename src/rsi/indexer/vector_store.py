@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 TABLE_NAME = "posts"
 
 
+def _subreddit_predicate(subreddit: str) -> str:
+    """Keep a subreddit value inside one SQL string literal."""
+    return "subreddit = '" + subreddit.replace("'", "''") + "'"
+
+
 class VectorStore:
     """LanceDB-backed vector store with FTS (BM25) support."""
 
@@ -77,7 +82,7 @@ class VectorStore:
             return []
         q = self._table.search(query_vector).limit(limit)
         if subreddit:
-            q = q.where(f"subreddit = '{subreddit}'")
+            q = q.where(_subreddit_predicate(subreddit))
         result: list[dict[str, Any]] = q.to_list()
         return result
 
@@ -92,7 +97,7 @@ class VectorStore:
             return []
         q = self._table.search(query, query_type="fts").limit(limit)
         if subreddit:
-            q = q.where(f"subreddit = '{subreddit}'")
+            q = q.where(_subreddit_predicate(subreddit))
         result: list[dict[str, Any]] = q.to_list()
         return result
 
@@ -123,7 +128,7 @@ class VectorStore:
             .limit(limit)
         )
         if subreddit:
-            q = q.where(f"subreddit = '{subreddit}'")
+            q = q.where(_subreddit_predicate(subreddit))
         result: list[dict[str, Any]] = q.to_list()
         return result
 
