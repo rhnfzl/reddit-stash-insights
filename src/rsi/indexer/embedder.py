@@ -34,8 +34,9 @@ class Embedder:
 
     provider = "local"
 
-    def __init__(self, model_name: str = DEFAULT_MODEL, use_fp16: bool = True):
+    def __init__(self, model_name: str = DEFAULT_MODEL, use_fp16: bool = True, *, return_sparse: bool = True):
         self.model = model_name
+        self._return_sparse = return_sparse
         _patch_transformers_compat()
         from FlagEmbedding import BGEM3FlagModel
 
@@ -70,12 +71,12 @@ class Embedder:
             texts,
             max_length=self.max_input_tokens + self._model.tokenizer.num_special_tokens_to_add(pair=False),
             return_dense=True,
-            return_sparse=True,
+            return_sparse=self._return_sparse,
             return_colbert_vecs=False,
         )
         return {
             "dense": output["dense_vecs"].tolist(),
-            "sparse": output["lexical_weights"],
+            "sparse": output["lexical_weights"] if self._return_sparse else [{} for _ in texts],
         }
 
     def embed_query(self, query: str) -> Dict[str, Any]:
@@ -186,4 +187,4 @@ def make_embedder(settings: "Settings") -> Any:
             max_input_tokens=settings.embedding_max_input_tokens,
             max_batch_tokens=settings.embedding_max_batch_tokens,
         )
-    return Embedder(model_name=settings.embedding_model, use_fp16=settings.embedding_use_fp16)
+    return Embedder(model_name=settings.embedding_model, use_fp16=settings.embedding_use_fp16, return_sparse=False)

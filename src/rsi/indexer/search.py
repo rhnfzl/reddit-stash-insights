@@ -173,6 +173,25 @@ class SearchEngine:
             self._store.create_fts_index()
         return dim
 
+    def search_candidates(
+        self,
+        query: str,
+        limit: int = 50,
+        mode: SearchMode = SearchMode.HYBRID,
+        subreddit: Optional[str] = None,
+        *,
+        _query_vector: Optional[List[float]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch raw ranked passages so evaluation can measure actual pool depth."""
+        if type(limit) is not int or limit < 1:
+            raise ValueError("search limit must be a positive integer")
+        if mode == SearchMode.KEYWORD:
+            return self._store.fts_search(query, limit=limit, subreddit=subreddit)
+        vector = _query_vector if _query_vector is not None else self._get_embedder().embed_query(query)["dense"]
+        if mode == SearchMode.SEMANTIC:
+            return self._store.vector_search(vector, limit=limit, subreddit=subreddit)
+        return self._store.hybrid_search(query=query, query_vector=vector, limit=limit, subreddit=subreddit)
+
     def search(
         self,
         query: str,
@@ -188,13 +207,8 @@ class SearchEngine:
             vector = self._get_embedder().embed_query(query)["dense"]
         results: list[dict[str, Any]] = []
         for candidate_limit in (max(50, limit), max(100, 2 * limit), max(200, 4 * limit)):
-            if mode == SearchMode.KEYWORD:
-                rows = self._store.fts_search(query, limit=candidate_limit, subreddit=subreddit)
-            elif mode == SearchMode.SEMANTIC:
-                rows = self._store.vector_search(vector, limit=candidate_limit, subreddit=subreddit)
-            else:
-                rows = self._store.hybrid_search(query=query, query_vector=vector,
-                                                 limit=candidate_limit, subreddit=subreddit)
+            rows = self.search_candidates(query, limit=candidate_limit, mode=mode,
+                                          subreddit=subreddit, _query_vector=vector)
             seen: set[str] = set()
             results = []
             for row in rows:

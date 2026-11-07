@@ -27,4 +27,3 @@ def canonical_doc_id(row: dict[str, Any]) -> str:
     if not item_id or not _valid_id(result):
         raise ValueError(f"invalid ranking document ID: {result!r}")
     return result
-

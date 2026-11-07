@@ -265,15 +265,16 @@ def _build_chat_engine(
 
 def _print_sources(sources: list[dict]) -> None:
     """Pretty-print source documents."""
+    from rsi.chat.prompt import source_reference
+
     if not sources:
         typer.echo("  No sources available.")
         return
     typer.echo()
     for i, src in enumerate(sources, 1):
         sub = src.get("subreddit", "?")
-        fpath = src.get("file_path", "?")
         preview = src.get("text", "")[:100].replace("\n", " ")
-        typer.echo(f"  [{i}] r/{sub} -- {fpath}")
+        typer.echo(f"  [{i}] r/{sub} -- {source_reference(src)}")
         typer.echo(f"      {preview}")
 
 
@@ -494,7 +495,7 @@ def evaluate_search(
                     raise ValueError("evaluation index metadata must be a JSON object")
                 engine = SearchEngine(db_path=db_path, settings=settings)
                 def search(query, limit, mode, subreddit):
-                    return engine.search(query, limit=limit, mode=SearchMode(mode), subreddit=subreddit)
+                    return engine.search_candidates(query, limit=limit, mode=SearchMode(mode), subreddit=subreddit)
                 index_identity = {**(metadata or {"schema": "legacy", "rows": engine.store.count()}),
                                   **index_fingerprint(engine.store, snapshot)}
             identity = {"embedding": "none (keyword)" if mode == "keyword" else {

@@ -8,6 +8,8 @@ from rsi.chat.history import ChatHistory
 from rsi.chat.prompt import build_messages
 from rsi.chat.providers.base import LLMProvider
 
+NO_CONTEXT_ANSWER = "I cannot answer from the retrieved context. No passage fits the input budget or retrieval found no evidence."
+
 if TYPE_CHECKING:
     from rsi.indexer.search import SearchEngine, SearchMode
 
@@ -44,23 +46,31 @@ class DirectEngine:
 
     def chat(self, query: str, limit: int = 5) -> ChatResponse:
         docs = self._search.search(query, limit=limit, mode=self._search_mode)
-        messages = build_messages(query, docs, self.history.to_messages())
-        answer = self._llm.generate(messages)
-        self.history.add_turn(query=query, response=answer, sources=docs)
-        return ChatResponse(answer=answer, sources=docs)
+        messages, sources = build_messages(
+            query, docs, self.history.to_messages(),
+            input_budget=self._llm.context_window - self._llm.max_output_tokens,
+            count_tokens=self._llm.count_tokens,
+        )
+        answer = self._llm.generate(messages) if sources else NO_CONTEXT_ANSWER
+        self.history.add_turn(query=query, response=answer, sources=sources)
+        return ChatResponse(answer=answer, sources=sources)
 
     def chat_stream(self, query: str, limit: int = 5) -> tuple[Iterator[str], list[dict]]:
         docs = self._search.search(query, limit=limit, mode=self._search_mode)
-        messages = build_messages(query, docs, self.history.to_messages())
+        messages, sources = build_messages(
+            query, docs, self.history.to_messages(),
+            input_budget=self._llm.context_window - self._llm.max_output_tokens,
+            count_tokens=self._llm.count_tokens,
+        )
 
         def _stream_and_record():
             chunks = []
-            for token in self._llm.stream(messages):
+            for token in self._llm.stream(messages) if sources else iter([NO_CONTEXT_ANSWER]):
                 chunks.append(token)
                 yield token
-            self.history.add_turn(query=query, response="".join(chunks), sources=docs)
+            self.history.add_turn(query=query, response="".join(chunks), sources=sources)
 
-        return _stream_and_record(), docs
+        return _stream_and_record(), sources
 
     def clear_history(self) -> None:
         self.history.clear()

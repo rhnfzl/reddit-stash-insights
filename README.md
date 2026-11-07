@@ -21,6 +21,7 @@ reddit-stash saves  -->  rsi indexes  -->  search & chat
 
 - **Hybrid search:** combines semantic (BGE-M3, 1024-dim) and keyword (BM25 via Tantivy) search with RRF reranking
 - **RAG chat:** ask questions about your archive using local or cloud LLMs with streaming responses
+- **Bounded evidence:** packs complete passages within the chat model budget and cites only included sources
 - **Multiple LLM providers:** llama-cpp (local GGUF), Ollama, OpenAI-compatible (vLLM, LM Studio)
 - **Local fallback:** switches between local providers; cloud fallback requires explicit consent
 - **MCP server:** expose search and chat as tools for Claude Code

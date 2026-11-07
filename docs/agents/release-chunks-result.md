@@ -99,3 +99,58 @@ The regression returns all 300 requested unique threads. Invalid limits fail bef
 The focused review-fix suite passes 86 tests with eight optional/model skips.
 The expanded chunk/core/search/evaluation suite then passes 135 tests with eight optional/model skips.
 Global Ruff and mypy checks pass after these fixes. No model downloads or private relevance scoring occurred.
+
+## Packed evidence and unused sparse output
+
+Adjacent short evidence sections now share one passage when their raw body spans fit the 512-token budget.
+One bounded section buffer preserves body text, order, source offsets, nested relationships, and every evidence permalink.
+Oversized sections retain the existing paragraph/token windows and 64-token overlap.
+Each passage has a nonempty `evidence_refs` list with fixed structs:
+`{evidence_id, permalink, parent_id, source_start, source_end}`.
+Reference offsets are clipped to the passage. All body characters remain covered across passages.
+Single-evidence scalar fields stay unchanged. Packed scalar fields identify the canonical thread and its valid thread URL.
+Missing links remain empty. The original source permalink and archive path stay unchanged.
+
+Algorithm version 2 is included in metadata and the generation hash.
+Unreleased schema 2 indexes with algorithm version 1 are rejected, including incomplete builds.
+Existing live schema 1 readers remain supported. New packed builds require a new directory or explicit rebuild.
+The coordinator preserves the interrupted version 1 candidate and selects a fresh packed candidate directory.
+
+`Embedder(..., *, return_sparse=True)` retains the public default.
+`make_embedder` selects `return_sparse=False` internally because search uses dense vectors and BM25.
+The disabled path returns one empty sparse dictionary per input and does not read absent lexical output.
+The verified project FlagEmbedding 1.4.2 source conditionally calls the sparse head at
+`.venv/lib/python3.14/site-packages/FlagEmbedding/finetune/embedder/encoder_only/m3/modeling.py:565`.
+This skips unused sparse computation. It does not remove dense model weights or establish a model-memory reduction.
+No model weights or quality settings change.
+
+Packing, fixed-struct serialization, algorithm rejection, public sparse defaults, and internal sparse skipping have regression tests.
+The expanded chunk/core/search/evaluation suite passes 144 tests with eight optional/model skips.
+Global Ruff, mypy across 30 source files, and whitespace checks pass.
+The tokenizer-only full-corpus aggregate count is recorded separately in the private evaluation directory.
+
+The full-corpus tokenizer-only count completes on 2,353 parsed items with zero parse errors.
+Packed algorithm 2 produces 84,790 passages, compared with 279,128 earlier passages.
+The exact reduction is 194,338 passages (69.62325528073143 percent).
+All passages stay at or below 512 active BGE tokens. All original body characters remain covered.
+The output retains 279,128 clipped evidence references. Median passages per source is one; the maximum is 755.
+The count and coverage checks take 218.99642570898868 seconds. This is not an embedding-speed benchmark.
+The aggregate report is `/private/tmp/rsi-private-eval/packed-passage-count.json`.
+No private question or label files are read.
+
+At 1,024 float32 dimensions, the calculated dense-vector payload is 347,299,840 bytes.
+The previous payload is 1,143,308,288 bytes. The exact reduction is 796,008,448 bytes.
+These calculations exclude model weights, row metadata, full-text indexes, and database overhead.
+A source-URL normalization regression also retains thread URLs without a trailing slash.
+
+The final expanded suite passes 145 tests with eight optional/model skips after URL normalization.
+Global Ruff and mypy checks still pass. Diff whitespace checks pass.
+
+## Bounded section-fit probes
+
+A final review finds that packing tokenizes an entire oversized section before deciding to window it.
+Both packing-fit decisions now use bounded `_fit` probes with the exact title prefix.
+The 100,000-character ASCII regression fails before the fix because the encoder receives 100,123 characters.
+After the fix, encoder calls stay within 1,031 characters in that test, while complete coverage and token limits hold.
+The passage rules and algorithm version stay unchanged. The full-corpus count is not repeated for this allocation fix.
+The final expanded suite passes 146 tests with eight optional/model skips. Global Ruff and mypy checks pass.

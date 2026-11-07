@@ -18,6 +18,16 @@ class ChatMessage:
         return {"role": self.role, "content": self.content}
 
 
+def estimate_tokens(messages: list[ChatMessage]) -> int:
+    """Count UTF-8 bytes, plus 128 tokens per message and 256 for reply framing.
+
+    shortcut: remote tokenizers/templates are unknown; this overcounts typical
+    byte-level text models, but custom templates can exceed the framing reserve.
+    Use a server-specific counter before supporting such templates.
+    """
+    return 256 + sum(len(m.content.encode("utf-8")) + len(m.role.encode("utf-8")) + 128 for m in messages)
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     """Interface that every LLM backend must satisfy."""
@@ -25,6 +35,15 @@ class LLMProvider(Protocol):
     @property
     def context_window(self) -> int:
         """Maximum token context length supported by the loaded model."""
+        ...
+
+    @property
+    def max_output_tokens(self) -> int:
+        """Configured generation limit, reserved before packing input."""
+        ...
+
+    def count_tokens(self, messages: list[ChatMessage]) -> int:
+        """Count input tokens including chat template and reply framing."""
         ...
 
     def generate(self, messages: list[ChatMessage]) -> str:
@@ -42,7 +61,7 @@ def create_provider(provider: str, model: str, **kwargs: Any) -> LLMProvider:
     Parameters
     ----------
     provider:
-        Backend identifier — one of ``"llama-cpp"``, ``"ollama"``, ``"openai"``.
+        Backend identifier, one of ``"llama-cpp"``, ``"ollama"``, ``"openai"``.
     model:
         Model path (llama-cpp GGUF), model tag (ollama), or model name (openai).
     **kwargs:

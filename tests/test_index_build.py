@@ -29,6 +29,7 @@ def _meta(db: Path) -> dict:
 
     meta = read_meta(db)
     assert meta is not None, f"no index metadata in {db}"
+    assert isinstance(meta, dict), f"invalid index metadata in {db}"
     return meta
 
 
@@ -74,8 +75,7 @@ def make_reddit_dir(root: Path, n=5, broken=0) -> Path:
     return root / "reddit"
 
 
-@unittest.skipUnless(HAS_LANCEDB, "requires index extra (lancedb)")
-class TestIndexBuild(unittest.TestCase):
+class IndexBuildTestCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -95,6 +95,9 @@ class TestIndexBuild(unittest.TestCase):
                 patch.dict(os.environ, env or {}):
             return CliRunner().invoke(app, args), embedder
 
+
+@unittest.skipUnless(HAS_LANCEDB, "requires index extra (lancedb)")
+class TestIndexBuild(IndexBuildTestCase):
     def test_fresh_openai_build_writes_metadata_last_and_honours_rsi_db_path(self):
 
         reddit = make_reddit_dir(self.root)
@@ -464,6 +467,45 @@ class TestIndexBuild(unittest.TestCase):
         with self.assertRaises(IndexConfigMismatch):
             SearchEngine(db, embedder=FakeEmbedder(), settings=Settings())
 
+    def test_unreleased_previous_chunk_algorithm_requires_fresh_index(self):
+        from rsi.config import Settings
+        from rsi.indexer.index_meta import IndexConfigMismatch
+        from rsi.indexer.search import SearchEngine
+        reddit = make_reddit_dir(self.root, n=1)
+        db = self.root / "db"
+        result, _ = self.run_cli(["index", str(reddit), "--db-path", str(db)])
+        self.assertEqual(result.exit_code, 0, result.output)
+        meta = _meta(db)
+        self.assertEqual(meta["chunks"]["version"], 3)
+        meta["chunks"]["version"] = 2
+        (db / "rsi_index.json").write_text(json.dumps(meta))
+        before = (db / "rsi_index.json").read_bytes()
+        with self.assertRaises(IndexConfigMismatch):
+            SearchEngine(db, embedder=FakeEmbedder(), settings=Settings())
+        result, _ = self.run_cli(["index", str(reddit), "--db-path", str(db)])
+        self.assertEqual(result.exit_code, 4, result.output)
+        self.assertEqual((db / "rsi_index.json").read_bytes(), before)
+
+    def test_every_serialized_passage_has_fixed_nonempty_evidence_structs(self):
+        from rsi.indexer.vector_store import VectorStore
+        reddit = make_reddit_dir(self.root, n=1)
+        db = self.root / "db"
+        result, _ = self.run_cli(["index", str(reddit), "--db-path", str(db)])
+        self.assertEqual(result.exit_code, 0, result.output)
+        store = VectorStore(db)
+        initial = store._table.search().limit(1).to_list()[0]
+        self.assertTrue(initial["evidence_refs"])
+        self.assertEqual(set(initial["evidence_refs"][0]),
+                         {"evidence_id", "permalink", "parent_id", "source_start", "source_end"})
+        path = reddit / "Python" / "POST_p0.md"
+        with path.open("a") as target:
+            target.write("\n**Comment by /u/reply**\n*Upvotes: 1 | "
+                         "[Permalink](https://reddit.com/r/Python/comments/p0/title/c1/)*\n\nshort reply\n")
+        result, _ = self.run_cli(["index", str(reddit), "--db-path", str(db)])
+        self.assertEqual(result.exit_code, 0, result.output)
+        rows = VectorStore(db)._table.search().limit(10).to_list()
+        self.assertTrue(any(len(row["evidence_refs"]) > 1 for row in rows))
+
     def test_schema_one_index_remains_readable_but_writer_requires_rebuild(self):
         from rsi.config import Settings
         from rsi.indexer.search import SearchEngine
@@ -494,10 +536,7 @@ if __name__ == "__main__":
     unittest.main()
 
 @unittest.skipUnless(HAS_LANCEDB, "requires index extra (lancedb)")
-class TestPassageCapacity(unittest.TestCase):
-    setUp = TestIndexBuild.setUp
-    tearDown = TestIndexBuild.tearDown
-    run_cli = TestIndexBuild.run_cli
+class TestPassageCapacity(IndexBuildTestCase):
     def test_actual_openai_capacity_rejected_before_any_index_write(self):
         from rsi.indexer.embedder import OpenAIEmbedder
         from tests.test_openai_embedder import HAS_DEPS, fake_client

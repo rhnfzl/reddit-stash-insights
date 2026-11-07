@@ -159,6 +159,7 @@ async def _handle_reddit_search(arguments: dict[str, Any]) -> list[TextContent]:
 def _chat_sync(query: str, limit: int) -> str:
     """Answer one question with a fresh engine, so no history leaks between calls or clients."""
     from rsi.chat.engine import DirectEngine
+    from rsi.chat.prompt import source_reference
     from rsi.chat.providers.availability import find_available_provider, provider_destination
     from rsi.chat.providers.base import create_provider
     from rsi.config import Settings
@@ -183,7 +184,7 @@ def _chat_sync(query: str, limit: int) -> str:
     if resp.sources:
         parts.append("\nSources:")
         for i, src in enumerate(resp.sources, 1):
-            parts.append(f"  [{i}] r/{src.get('subreddit', '?')} -- {src.get('file_path', '?')}")
+            parts.append(f"  [{i}] r/{src.get('subreddit', '?')} -- {source_reference(src)}")
     return "\n".join(parts)
 
 

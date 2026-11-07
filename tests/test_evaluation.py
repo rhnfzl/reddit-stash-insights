@@ -4,6 +4,7 @@ import math
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 from rsi.evaluation import canonical_doc_id, evaluate, load_dataset, retrieve_threads, score_ranking, snapshot_manifest
 
@@ -32,8 +33,11 @@ class TestScores(unittest.TestCase):
         self.assertEqual(scores["recall@10"], 1.0)
 
     def test_bad_rankings_and_labels_are_errors(self):
-        for ranking, labels in [(["chunk:a"], {"post:a": 2}), (["post:a"], {"post:a": 3}),
-                                (["post:a"], {"post:a": True}), ([], {"post:a": 0})]:
+        cases: list[tuple[list[str], dict[str, Any]]] = [
+            (["chunk:a"], {"post:a": 2}), (["post:a"], {"post:a": 3}),
+            (["post:a"], {"post:a": True}), ([], {"post:a": 0}),
+        ]
+        for ranking, labels in cases:
             with self.subTest(ranking=ranking, labels=labels), self.assertRaises(ValueError):
                 score_ranking(ranking, labels)
 
@@ -104,6 +108,7 @@ class TestDatasetValidation(unittest.TestCase):
             self.load()
 
     def test_malformed_manifest_and_unhashable_label_ids_raise_validation_errors(self):
+        value: Any
         for value in ([], {"files": [], "sha256": "x"}, {"documents": [[]]}):
             self.write()
             (self.root / "snapshot.json").write_text(json.dumps(value))
@@ -150,7 +155,9 @@ class TestReports(unittest.TestCase):
         self.queries = [{"query_id": "a", "query": "water", "answerable": True, "split": "dev", "tags": []},
                         {"query_id": "b", "query": "missing", "answerable": False, "split": "dev", "tags": []}]
         self.labels = {"a": {"post:p": 2}, "b": {}}
-        self.snapshot = {"sha256": "test", "documents": ["post:p"], "aliases": {"comment:c": "post:p"}}
+        self.snapshot: dict[str, Any] = {
+            "sha256": "test", "documents": ["post:p"], "aliases": {"comment:c": "post:p"},
+        }
 
     def run_eval(self, search):
         return evaluate(self.queries, self.labels, self.snapshot, search, mode="keyword", split="dev", identity={})

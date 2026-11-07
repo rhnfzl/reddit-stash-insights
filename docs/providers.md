@@ -152,6 +152,18 @@ provider = "openai"
 model = "Qwen/Qwen2.5-7B-Instruct"  # Model name as loaded in vLLM
 ```
 
+## Context budgets
+
+Chat reserves the configured response tokens before packing complete source passages and conversation history.
+Oldest history turns are removed first. Sources that do not fit are omitted from both the prompt and citations.
+If no source fits, RSI returns an explanation without calling the model.
+Rebuild legacy indexes into passages to use long-thread evidence within small context windows.
+
+Local GGUF models use their chat template and tokenizer for the count.
+OpenAI-compatible and Ollama templates use a conservative byte-based estimate with a framing reserve.
+Unusual custom server templates can exceed that reserve; use a server-specific counter before enabling them.
+The Ollama request sets `num_ctx` to the provider's advertised context window.
+
 ## Auto-Fallback
 
 When chat starts, rsi checks the configured provider first. If unavailable, it tries these alternatives:

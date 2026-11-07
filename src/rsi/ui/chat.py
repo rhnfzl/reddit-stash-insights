@@ -10,6 +10,7 @@ from pathlib import Path
 import streamlit as st
 
 from rsi.config import Settings
+from rsi.chat.prompt import source_reference
 from rsi.indexer.search import SearchMode
 
 logger = logging.getLogger(__name__)
@@ -90,9 +91,8 @@ def _display_sources(sources: list[dict]) -> None:
     with st.expander(f"Sources ({len(sources)})"):
         for i, src in enumerate(sources, 1):
             sub = src.get("subreddit", "?")
-            fpath = src.get("file_path", "?")
             preview = src.get("text", "")[:200].replace("\n", " ")
-            st.markdown(f"**[{i}]** r/{sub} -- `{fpath}`")
+            st.markdown(f"**[{i}]** r/{sub} -- `{source_reference(src)}`")
             st.caption(preview)
 
 

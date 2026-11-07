@@ -5,10 +5,13 @@ import hashlib
 import re
 from collections.abc import Callable, Iterator
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from rsi.core.identity import canonical_doc_id
 from rsi.core.models import Comment, Post
+
+ALGORITHM_VERSION = 3
+Section = tuple[int, int, str, str, str, str]
 
 _HEADER = re.compile(r'(?m)^(?P<quote>(?:> ?)*)\*\*Comment by (?P<author>[^\n]+)\*\*[^\n]*\n')
 _LINK = re.compile(r'\[Permalink\]\(([^)]+)\)')
@@ -31,7 +34,7 @@ def _fit(text: str, encode: Callable[[str], list[int]], budget: int) -> int:
     return low
 
 
-def _sections(item: Post | Comment) -> Iterator[tuple[int, int, str, str, str, str]]:
+def _sections(item: Post | Comment) -> Iterator[Section]:
     kind = 'post' if isinstance(item, Post) else 'comment'
     evidence, parent = f'{kind}:{item.id}', getattr(item, 'parent_id', None) or ''
     start, url, context = 0, item.permalink, ''
@@ -54,6 +57,38 @@ def _sections(item: Post | Comment) -> Iterator[tuple[int, int, str, str, str, s
         yield start, len(item.body), evidence, parent, url, context
 
 
+def _thread_permalink(permalink: str) -> str:
+    parts = urlsplit(permalink)
+    if parts.scheme not in ("http", "https") or not (parts.hostname == "reddit.com"
+                                                     or (parts.hostname or "").endswith(".reddit.com")):
+        return ""
+    match = re.match(r"(.*/comments/[a-zA-Z0-9_-]+(?:/[^/]+)?)(?:/|$)", parts.path)
+    return urlunsplit((parts.scheme, parts.netloc, match[1].rstrip("/") + "/", "", "")) if match else ""
+
+
+def _packed_sections(
+    item: Post | Comment, encode: Callable[[str], list[int]], prefix: str, max_tokens: int,
+) -> Iterator[list[Section]]:
+    """Keep one bounded buffer of adjacent complete evidence sections."""
+    pending: list[Section] = []
+    for section in _sections(item):
+        text = item.body[section[0]:section[1]]
+        if _fit(text, lambda body: encode(prefix + body), max_tokens) < len(text):
+            if pending:
+                yield pending
+                pending = []
+            yield [section]
+            continue
+        if pending:
+            candidate = item.body[pending[0][0]:section[1]]
+            if _fit(candidate, lambda text: encode(prefix + text), max_tokens) < len(candidate):
+                yield pending
+                pending = []
+        pending.append(section)
+    if pending:
+        yield pending
+
+
 def iter_chunks(
     item: Post | Comment, *, encode: Callable[[str], list[int]], decode: Callable[[list[int]], str],
     max_tokens: int = 512, overlap: int = 64,
@@ -69,9 +104,19 @@ def iter_chunks(
     source = f'{kind}:{item.id}'
     thread = canonical_doc_id({'id': item.id, 'content_type': kind, 'permalink': item.permalink})
     title = item.title if isinstance(item, Post) else item.parent_title or ''
-    generation = hashlib.sha256(f'{max_tokens}:{overlap}:{title}:{item.body}'.encode()).hexdigest()
+    generation = hashlib.sha256(f'{ALGORITHM_VERSION}:{max_tokens}:{overlap}:{title}:{item.body}'.encode()).hexdigest()
     ordinal = 0
-    for begin, end, evidence, parent, permalink, context in _sections(item):
+    packed_title = title[:_fit(title, encode, max_tokens // 2)]
+    packed_prefix = packed_title + '\n\n' if packed_title else ''
+    for sections in _packed_sections(item, encode, packed_prefix, max_tokens):
+        begin, end = sections[0][0], sections[-1][1]
+        _, _, evidence, parent, permalink, context = sections[0]
+        if len(sections) > 1:
+            evidence, parent, context = thread, '', ''
+            permalink = _thread_permalink(item.permalink)
+            if not permalink:
+                permalink = next((_thread_permalink(section[4]) for section in sections
+                                  if _thread_permalink(section[4])), '')
         # Reserve at least half the passage for evidence even when a title is very long.
         heading = '\n'.join(part for part in (title, context) if part)
         heading = heading[:_fit(heading, encode, max_tokens // 2)]
@@ -85,12 +130,14 @@ def iter_chunks(
             stop = start + _fit(remaining, encode, budget)
             if stop == start and remaining:
                 raise ValueError('chunk token budget cannot fit one source character')
+            paragraph_end = None
             if stop < end:
                 boundary = None
                 for boundary in _PARAGRAPH.finditer(item.body, start, stop):
                     pass
                 if boundary is not None and boundary.end() > start:
-                    stop = boundary.end()
+                    paragraph_end = boundary.end()
+                    stop = paragraph_end
             passage = item.body[start:stop]
             text = prefix + passage or " "
             # Token merges at the prefix boundary can change the exact count.
@@ -103,6 +150,11 @@ def iter_chunks(
                 'id': item.id, 'doc_id': source, 'source_doc_id': source, 'evidence_id': evidence,
                 'chunk_id': f'{source}:{ordinal}', 'ordinal': ordinal, 'generation': generation,
                 'parent_doc_id': thread, 'parent_id': parent, 'text': text, 'permalink': permalink,
+                'evidence_refs': [
+                    {'evidence_id': section[2], 'permalink': section[4], 'parent_id': section[3],
+                     'source_start': max(start, section[0]), 'source_end': min(stop, section[1])}
+                    for section in sections if section[0] < stop and section[1] > start or begin == end
+                ],
                 'source_permalink': item.permalink, 'file_path': item.file_path, 'content_type': kind,
                 'source_start': start, 'source_end': stop, 'source_offset_basis': 'body',
                 'subreddit': item.subreddit, 'score': item.score,
@@ -112,7 +164,7 @@ def iter_chunks(
             if stop >= end:
                 break
             # Overlap only inside oversized paragraphs; whole paragraph boundaries remain independent.
-            if item.body[max(start, stop - 2):stop] == '\n\n' or overlap == 0:
+            if stop == paragraph_end or overlap == 0:
                 start = stop
             else:
                 tail_length = _fit(passage[::-1], lambda s: encode(s[::-1]), min(overlap, budget // 2))

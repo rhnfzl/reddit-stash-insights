@@ -91,7 +91,10 @@ rsi index ~/reddit --s3-bucket $RSI_S3_BUCKET
 `local` needs the `search` extra (torch, BGE-M3). `openai` needs the `embed-openai` extra and calls any
 OpenAI-compatible `/v1/embeddings` endpoint: each input is cut to 8000 tokens with the model tokenizer
 (tiktoken), requests stay under 128 inputs and 250k tokens, and the SDK retries rate limits and server errors.
-The indexer splits each document at comment and paragraph boundaries. Oversized paragraphs and code
+The indexer packs adjacent short comments into passages and preserves their original body text.
+Each passage includes `evidence_refs`, a nonempty list of evidence IDs, permalinks, parent IDs, and clipped body offsets.
+Packed passages use the source thread as their primary evidence and URL. Single-evidence passages retain their evidence-specific fields.
+Oversized paragraphs and code
 use overlapping windows with the active embedding tokenizer. Unicode characters stay intact.
 The 512-token limit includes repeated title and comment context. The indexer retains evidence after
 character 32,000 and writes at most `RSI_INDEX_CHUNK` passage vectors per batch.
@@ -107,7 +110,7 @@ comment parent when available. `source_start` and `source_end` are character off
 body, as recorded by `source_offset_basis = "body"`.
 
 `rsi index` writes schema 2 metadata in `rsi_index.json`. Metadata includes provider, model, dimension,
-row count, parse errors, build time, `input_token_capacity`, and `chunks: {version: 1, max_tokens: 512, overlap: 64}`.
+row count, parse errors, build time, `input_token_capacity`, and `chunks: {version: 3, max_tokens: 512, overlap: 64}`.
 Readers reject unknown schemas, different chunk settings, and different embedding models before querying.
 The `complete` marker is false during indexing and true only after the full-text index finishes.
 Readers refuse unfinished builds. Retry the same index command to finish an interrupted build.
@@ -126,9 +129,13 @@ RSI_DB_PATH=~/.rsi/index/passages.lance rsi health
 Point readers at the new directory after validation. Keep the old directory for rollback.
 `--rebuild` deletes the selected table, so use it only when discarding that index is intended.
 Changing chunk settings or the embedding provider requires a fresh directory or an explicit rebuild.
+The unreleased chunk algorithms 1 and 2 require a fresh directory or rebuild before algorithm 3 writes.
+Legacy schema 1 remains readable.
 The passage token limit cannot exceed the active encoder capacity. Invalid limits are rejected before metadata writes or rebuild deletion.
 Local capacity excludes tokenizer special tokens. Local encoding explicitly uses the model/tokenizer sequence limit.
 OpenAI capacity uses the configured per-input token cap.
+The internal local embedder disables unused BGE sparse output. Retrieval uses dense vectors and full-text search.
+Direct `Embedder()` callers retain sparse output by default; `return_sparse=False` is an explicit keyword option.
 `RSI_INDEX_CHUNK` must be positive. Chunk overlap must be nonnegative and smaller than the token limit.
 
 ### Index and health exit codes

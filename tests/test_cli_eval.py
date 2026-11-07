@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
@@ -12,6 +12,67 @@ from rsi.cli import app
 
 
 class TestEvalCommand(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("lancedb"), "index extra not installed")
+    def test_raw_engine_candidates_fetch_only_the_pool_needed_for_ten_threads(self):
+        from rsi.evaluation import retrieve_threads
+        from rsi.indexer.search import SearchEngine, SearchMode
+
+        engine = SearchEngine.__new__(SearchEngine)
+        store = MagicMock()
+        engine._store = store
+        store.fts_search.side_effect = lambda query, limit, subreddit: [
+            {"id": f"chunk{i}", "content_type": "post", "parent_doc_id": f"post:p{i // 12}"}
+            for i in range(min(limit, 120))
+        ]
+
+        def search(query, limit, mode, subreddit):
+            return engine.search_candidates(query, limit=limit, mode=SearchMode(mode), subreddit=subreddit)
+
+        rows, depth = retrieve_threads(search, "fact", "keyword")
+        self.assertEqual(len(rows), 10)
+        self.assertEqual(depth, 200)
+        self.assertEqual([call.kwargs["limit"] for call in store.fts_search.call_args_list], [50, 100, 200])
+        store.fts_search.reset_mock()
+        store.fts_search.side_effect = lambda query, limit, subreddit: [
+            {"id": f"p{i}", "content_type": "post"} for i in range(limit)
+        ]
+        rows, depth = retrieve_threads(search, "fact", "keyword")
+        self.assertEqual(len(rows), 10)
+        self.assertEqual(depth, 50)
+        self.assertEqual([call.kwargs["limit"] for call in store.fts_search.call_args_list], [50])
+
+    @unittest.skipUnless(importlib.util.find_spec("lancedb"), "index extra not installed")
+    def test_external_evaluation_reports_actual_raw_candidate_depth(self):
+        from rsi.evaluation import export_fixture
+
+        depths = []
+        engine = MagicMock()
+        engine.store.count.return_value = 120
+        engine.search.side_effect = AssertionError("evaluation must not deduplicate candidates twice")
+
+        def candidates(query, *, limit, mode, subreddit):
+            depths.append(limit)
+            return [{"id": f"chunk{i}", "content_type": "post", "parent_doc_id": f"post:f{i // 12 + 1:03}"}
+                    for i in range(min(limit, 120))]
+
+        engine.search_candidates.side_effect = candidates
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            export_fixture(root / "fixture")
+            (root / "index").mkdir()
+            args = ["eval", "--dataset", str(root / "fixture/questions.jsonl"), "--qrels",
+                    str(root / "fixture/qrels.jsonl"), "--corpus", str(root / "fixture/corpus"),
+                    "--db-path", str(root / "index"), "--output", str(root / "run.json")]
+            with patch("rsi.indexer.search.SearchEngine", return_value=engine), patch(
+                "rsi.evaluation.index_fingerprint", return_value={"source_thread_count": 10}
+            ):
+                result = CliRunner().invoke(app, args, env={"RSI_EMBEDDING_PROVIDER": "local"})
+            self.assertEqual(result.exit_code, 0, result.output + repr(result.exception))
+            report = json.loads((root / "run.json").read_text())
+        self.assertEqual(depths[:3], [50, 100, 200])
+        self.assertTrue(all(row["candidate_depth"] == 200 for row in report["queries"]))
+        engine.search.assert_not_called()
+
     def test_fixture_rejects_semantic_and_missing_explicit_inputs(self):
         runner = CliRunner()
         for args in [["eval", "--fixture", "--mode", "semantic"], ["eval"]]:

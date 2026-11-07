@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from rsi.indexer.chunker import ALGORITHM_VERSION
+
 META_FILE = "rsi_index.json"
 SCHEMA = 2
 # Indexes built before metadata existed were always local BGE-M3.
@@ -44,7 +46,7 @@ def write_meta(
     """
     data = {
         "schema": SCHEMA,
-        "chunks": {"version": 1, "max_tokens": chunk_tokens, "overlap": chunk_overlap},
+        "chunks": {"version": ALGORITHM_VERSION, "max_tokens": chunk_tokens, "overlap": chunk_overlap},
         "complete": complete,
         "provider": provider,
         "model": model,
@@ -82,7 +84,7 @@ def check_compatible(
         raise IndexConfigMismatch(f"unsupported index schema at {db_path}: use a fresh directory or --rebuild")
     if writing and has_table and (meta is None or meta.get("schema") != SCHEMA):
         raise IndexConfigMismatch(f"legacy index at {db_path} is read-only: use a fresh directory or --rebuild")
-    expected = {"version": 1, "max_tokens": chunk_tokens, "overlap": chunk_overlap}
+    expected = {"version": ALGORITHM_VERSION, "max_tokens": chunk_tokens, "overlap": chunk_overlap}
     if meta is not None and meta.get("schema") == SCHEMA and meta.get("chunks") != expected:
         raise IndexConfigMismatch(f"index chunk settings differ at {db_path}: use a fresh directory or --rebuild")
     if meta is not None and meta.get("complete") is False and not allow_incomplete:

@@ -72,6 +72,7 @@ include = [
     "/tests",
     "/README.md",
     "/LICENSE",
+    "/CHANGELOG.md",
     "/pyproject.toml",
     "/noxfile.py",
     "/docs/evaluation.md",
