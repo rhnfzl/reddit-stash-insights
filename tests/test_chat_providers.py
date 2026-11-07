@@ -267,7 +267,7 @@ class TestCheckProvider(unittest.TestCase):
             from rsi.chat.providers.availability import _check_ollama
 
             result = _check_ollama()
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertIn("not reachable", result)
 
     def test_check_ollama_available(self):
@@ -290,7 +290,7 @@ class TestCheckProvider(unittest.TestCase):
 
             with patch.object(availability, "_MODELS_DIR", Path("/tmp/nonexistent_rsi_models_dir")):
                 result = availability.check_provider("llama-cpp", "/tmp/nonexistent.gguf")
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertIn("No GGUF model found", result)
 
     def test_check_openai_no_key(self):
@@ -300,7 +300,7 @@ class TestCheckProvider(unittest.TestCase):
             from rsi.chat.providers.availability import _check_openai
 
             result = _check_openai()
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertIn("OPENAI_API_KEY", result)
 
 
@@ -325,6 +325,7 @@ class TestFindAvailableProvider(unittest.TestCase):
             provider, _, note = availability.find_available_provider("ollama", "test")
         self.assertIsNone(provider)
         self.assertNotIn("openai", [call.args[0] for call in check.call_args_list])
+        assert note is not None
         self.assertIn("cloud fallback disabled", note.lower())
 
     def test_cloud_fallback_requires_opt_in(self):
@@ -333,6 +334,7 @@ class TestFindAvailableProvider(unittest.TestCase):
         with patch.object(availability, "check_provider", side_effect=lambda p, m: None if p == "openai" else "offline"):
             provider, model, note = availability.find_available_provider("ollama", "test", allow_cloud_fallback=True)
         self.assertEqual((provider, model), ("openai", "test"))
+        assert note is not None
         self.assertIn("openai", note)
 
     def test_explicit_cloud_selection_is_supported_without_fallback_consent(self):
@@ -354,7 +356,7 @@ class TestFindAvailableProvider(unittest.TestCase):
 
         self.assertIsNotNone(provider)
         self.assertNotEqual(provider, "ollama")
-        self.assertIsNotNone(note)
+        assert note is not None
         self.assertIn("ollama", note.lower())
 
     def test_all_unavailable(self):
@@ -366,6 +368,7 @@ class TestFindAvailableProvider(unittest.TestCase):
 
         self.assertIsNone(provider)
         self.assertIsNone(model)
+        assert note is not None
         self.assertIn("No LLM provider available", note)
 
     def test_gguf_auto_detect(self):
@@ -380,7 +383,7 @@ class TestFindAvailableProvider(unittest.TestCase):
             gguf_file.touch()
             with patch.object(availability, "_MODELS_DIR", Path(tmpdir)):
                 result = availability._resolve_gguf_path("not-a-real-path")
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertTrue(result.endswith(".gguf"))
 
 

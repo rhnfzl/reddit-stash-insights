@@ -23,12 +23,15 @@ CORE_TESTS = [
     "tests.test_chat_providers",
     "tests.test_chat_engine",
     "tests.test_cli_chat",
+    "tests.test_evaluation",
+    "tests.test_cli_eval",
 ]
 SEARCH_TESTS = [
     "tests.test_embedder",
     "tests.test_vector_store",
     "tests.test_search",
     "tests.test_cli_search",
+    "tests.test_cli_eval",
 ]
 
 

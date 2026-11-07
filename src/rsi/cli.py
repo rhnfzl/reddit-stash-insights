@@ -437,3 +437,100 @@ def mcp(
     else:
         typer.echo(f"Transport '{transport}' not supported. Use 'stdio' or 'http'.")
         raise typer.Exit(1)
+
+
+@app.command("eval")
+def evaluate_search(
+    dataset: Optional[Path] = typer.Option(None, "--dataset", help="Questions JSONL; snapshot.json must be alongside"),
+    qrels: Optional[Path] = typer.Option(None, "--qrels", help="Canonical source-thread relevance labels JSONL"),
+    corpus: Optional[Path] = typer.Option(None, "--corpus", help="Frozen Markdown corpus to verify against snapshot.json"),
+    db_path: Optional[Path] = typer.Option(None, "--db-path", help="Explicit evaluation index; never defaults to live index"),
+    mode: str = typer.Option("keyword", "--mode", help="keyword, semantic or hybrid"),
+    split: str = typer.Option("dev", "--split", help="dev, test or all"),
+    output: Path = typer.Option(Path("evaluation.json"), "--output", help="JSON report destination"),
+    fixture: bool = typer.Option(False, "--fixture", help="Build a temporary FTS index of the packaged synthetic corpus"),
+    allow_remote: bool = typer.Option(False, "--allow-remote", help="Allow the configured hosted embedding destination"),
+) -> None:
+    """Measure search against frozen labels without calling a chat model."""
+    import hashlib
+    import json
+    import os
+    import tempfile
+    from urllib.parse import urlsplit, urlunsplit
+
+    from rsi.config import Settings
+    from rsi.evaluation import evaluate, export_fixture, index_fingerprint, load_dataset
+    from rsi.indexer.index_meta import read_meta
+
+    if mode not in ("keyword", "semantic", "hybrid") or split not in ("dev", "test", "all"):
+        raise typer.BadParameter("mode must be keyword/semantic/hybrid and split must be dev/test/all")
+    if fixture and (mode != "keyword" or any(value is not None for value in (dataset, qrels, corpus, db_path))):
+        raise typer.BadParameter("--fixture requires keyword mode and owns its temporary corpus and index")
+    if not fixture and any(value is None for value in (dataset, qrels, corpus, db_path)):
+        raise typer.BadParameter("provide --dataset, --qrels, --corpus and --db-path, or use --fixture")
+    settings = Settings.load()
+    if mode != "keyword" and settings.embedding_provider != "local":
+        destination = settings.embedding_base_url or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+        parts = urlsplit(destination)
+        destination = urlunsplit((parts.scheme, parts.netloc.rsplit("@", 1)[-1], parts.path, "", ""))
+        if not allow_remote:
+            raise typer.BadParameter(f"hosted embeddings require --allow-remote; destination: {destination}")
+        typer.echo(f"Embedding destination: {destination}. Evaluation query text will be sent there.", err=True)
+    try:
+        with tempfile.TemporaryDirectory(prefix="rsi-eval-") as tmp:
+            if fixture:
+                from rsi.core.scanner import scan_directory
+                from rsi.indexer.vector_store import VectorStore
+
+                fixture_root = Path(tmp) / "fixture"
+                export_fixture(fixture_root)
+                dataset, qrels, corpus = (fixture_root / "questions.jsonl", fixture_root / "qrels.jsonl",
+                                           fixture_root / "corpus")
+                db_path = Path(tmp) / "index"
+                queries, labels, snapshot = load_dataset(dataset, qrels, corpus)
+                scan_result = scan_directory(corpus)
+                store = VectorStore(db_path)
+                records: list[dict] = []
+                for kind, items in (("post", scan_result.posts), ("comment", scan_result.comments)):
+                    records.extend({"id": item.id, "content_type": kind, "text": item.search_text(),
+                                    "subreddit": item.subreddit, "permalink": item.permalink,
+                                    "file_path": str(item.file_path)} for item in items)
+                store.add_records(records)
+                store.create_fts_index()
+                def search(query, limit, mode, subreddit):
+                    return store.fts_search(query, limit, subreddit)
+                index_identity = {"schema": "FTS-only synthetic fixture", "rows": store.count(),
+                                  **index_fingerprint(store, snapshot)}
+            else:
+                from rsi.indexer.search import SearchEngine, SearchMode
+
+                assert dataset is not None and qrels is not None and corpus is not None and db_path is not None
+                queries, labels, snapshot = load_dataset(dataset, qrels, corpus)
+                if not db_path.exists():
+                    raise ValueError(f"evaluation index does not exist: {db_path}")
+                metadata = read_meta(db_path)
+                if metadata is not None and not isinstance(metadata, dict):
+                    raise ValueError("evaluation index metadata must be a JSON object")
+                engine = SearchEngine(db_path=db_path, settings=settings)
+                def search(query, limit, mode, subreddit):
+                    return engine.search(query, limit=limit, mode=SearchMode(mode), subreddit=subreddit)
+                index_identity = {**(metadata or {"schema": "legacy", "rows": engine.store.count()}),
+                                  **index_fingerprint(engine.store, snapshot)}
+            identity = {"embedding": "none (keyword)" if mode == "keyword" else {
+                "provider": settings.embedding_provider, "model": settings.embedding_model,
+            }, "index": index_identity, "config": {"mode": mode, "split": split, "cutoff": 10,
+                  "candidate_depths": [50, 100, 200], "thread_order": "first occurrence",
+                  "allow_remote": allow_remote, "max_text_chars": settings.max_text_chars,
+                  "index_chunk_size": settings.index_chunk_size, "embedding_use_fp16": settings.embedding_use_fp16},
+                "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+                "qrels_sha256": hashlib.sha256(qrels.read_bytes()).hexdigest()}
+            report = evaluate(queries, labels, snapshot, search, mode=mode, split=split, identity=identity)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    except (ValueError, OSError, RuntimeError, ImportError) as error:
+        typer.echo(f"Evaluation failed: {error}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"{report['answerable_count']} answerable, {report['absent_count']} absent, "
+               f"{report['error_count']} errors. Report: {output}")
+    if report["error_count"]:
+        raise typer.Exit(1)

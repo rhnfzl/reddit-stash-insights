@@ -23,3 +23,6 @@ ab_test_rag.py
 ab_test_results_*.json
 tests/fixtures/rag_test_questions.json
 *_log.txt
+evaluation.json
+evaluation-*.json
+eval-reports/
