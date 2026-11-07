@@ -1,4 +1,5 @@
 """Index build, metadata, compatibility checks and the health command (fake embedder, no model)."""
+import importlib.util
 import json
 import os
 import tempfile
@@ -322,6 +323,7 @@ class TestIndexBuild(IndexBuildTestCase):
         result, _ = self.run_cli(["health", "--db-path", str(db)])
         self.assertEqual(result.exit_code, 0, msg=result.output)
 
+    @unittest.skipUnless(importlib.util.find_spec("mcp") and importlib.util.find_spec("uvicorn"), "requires mcp extra")
     def test_http_startup_rejects_crashed_build(self):
         from rsi import mcp_server
         from rsi.indexer.index_meta import IndexIncomplete, write_meta
@@ -393,6 +395,7 @@ class TestIndexBuild(IndexBuildTestCase):
                 t.join()
         self.assertEqual(len(built), 1)
 
+    @unittest.skipUnless(importlib.util.find_spec("mcp"), "requires mcp extra")
     def test_concurrent_first_mcp_calls_open_one_engine(self):
         import threading
         import time

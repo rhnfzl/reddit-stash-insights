@@ -1,12 +1,12 @@
 """CLI evaluation runs locally and errors cannot become successful scores."""
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from click import unstyle
 from typer.testing import CliRunner
 
 from rsi.cli import app
@@ -120,8 +120,9 @@ class TestEvalCommand(unittest.TestCase):
         env = {"RSI_EMBEDDING_PROVIDER": "openai", "RSI_EMBEDDING_BASE_URL": "https://host.example/v1"}
         result = CliRunner().invoke(app, args, env=env, color=True)
         self.assertEqual(result.exit_code, 2)
-        self.assertIn("--allow-remote", unstyle(result.output))
-        self.assertIn("https://host.example/v1", unstyle(result.output))
+        output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        self.assertIn("--allow-remote", output)
+        self.assertIn("https://host.example/v1", output)
         result = CliRunner().invoke(app, args + ["--allow-remote"], env=env)
         self.assertNotEqual(result.exit_code, 0)
         self.assertIn("Embedding destination: https://host.example/v1", result.output)
