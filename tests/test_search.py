@@ -161,3 +161,74 @@ class TestSearchMode(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestUniqueThreads(unittest.TestCase):
+    def test_all_modes_overfetch_duplicates_and_preserve_best_passage(self):
+        from unittest.mock import Mock
+        from rsi.config import Settings
+        from rsi.indexer.search import SearchEngine, SearchMode
+        rows = [{'id': 'a', 'content_type': 'post', 'parent_doc_id': 'post:a', 'text': f'passage {i}'}
+                for i in range(10)]
+        rows += [{'id': 'c', 'content_type': 'comment', 'permalink': '/r/x/comments/a/title/c/'},
+                 {'id': 'b', 'content_type': 'post', 'text': 'other thread'}]
+        engine = object.__new__(SearchEngine)
+        engine._settings = Settings()
+        engine._store = Mock()
+        engine._get_embedder = Mock(return_value=Mock(embed_query=Mock(return_value={'dense': [0.1]})))
+        for mode, method in [(SearchMode.KEYWORD, 'fts_search'), (SearchMode.SEMANTIC, 'vector_search'),
+                             (SearchMode.HYBRID, 'hybrid_search')]:
+            with self.subTest(mode=mode):
+                search = getattr(engine._store, method)
+                search.return_value = rows
+                results = engine.search('query', limit=2, mode=mode)
+                self.assertEqual([r['id'] for r in results], ['a', 'b'])
+                self.assertEqual(results[0]['text'], 'passage 0')
+                self.assertEqual(search.call_args.kwargs['limit'], 50)
+
+
+class TestBoundedOverfetch(unittest.TestCase):
+    def test_expands_to_100_then_200_and_stops(self):
+        from unittest.mock import Mock
+        from rsi.indexer.search import SearchEngine, SearchMode
+        engine = object.__new__(SearchEngine)
+        engine._store = Mock()
+        duplicate = {"id": "p", "content_type": "post", "text": "best passage"}
+        def candidates(query, *, limit, subreddit):
+            return [duplicate] * limit
+        engine._store.fts_search.side_effect = candidates
+        self.assertEqual(engine.search("query", limit=10, mode=SearchMode.KEYWORD), [duplicate])
+        self.assertEqual([call.kwargs["limit"] for call in engine._store.fts_search.call_args_list], [50, 100, 200])
+
+class TestLegacyWriteBoundary(unittest.TestCase):
+    def test_raw_text_writer_refuses_existing_index(self):
+        from unittest.mock import Mock
+        from rsi.config import Settings
+        from rsi.indexer.index_meta import IndexConfigMismatch
+        from rsi.indexer.search import SearchEngine
+        engine = object.__new__(SearchEngine)
+        engine._settings = Settings()
+        engine._store = Mock(has_table=Mock(return_value=True))
+        engine._get_embedder = Mock()
+        with self.assertRaises(IndexConfigMismatch):
+            engine.index_texts(['new text'], ['p'], [{'content_type': 'post'}])
+        engine._get_embedder.assert_not_called()
+
+class TestRequestedLimit(unittest.TestCase):
+    def test_three_hundred_unique_threads_are_returned(self):
+        from unittest.mock import Mock
+        from rsi.indexer.search import SearchEngine, SearchMode
+        engine = object.__new__(SearchEngine)
+        engine._store = Mock()
+        rows = [{"id": f"p{i}", "content_type": "post"} for i in range(300)]
+        engine._store.fts_search.side_effect = lambda query, *, limit, subreddit: rows[:limit]
+        self.assertEqual(len(engine.search("query", limit=300, mode=SearchMode.KEYWORD)), 300)
+
+    def test_limit_requires_positive_integer(self):
+        from unittest.mock import Mock
+        from rsi.indexer.search import SearchEngine, SearchMode
+        engine = object.__new__(SearchEngine)
+        engine._store = Mock()
+        for limit in (0, -1, True, 1.5):
+            with self.subTest(limit=limit), self.assertRaises(ValueError):
+                engine.search("query", limit=limit, mode=SearchMode.KEYWORD)
+        engine._store.fts_search.assert_not_called()

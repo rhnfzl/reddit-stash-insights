@@ -3,7 +3,7 @@
 You can chat with your archive using local models or an OpenAI-compatible API.
 Local provider failure does not permit cloud fallback unless you opt in.
 Each provider has an optional dependency. Install only what you need.
-Use the [source checkout instructions](../README.md#quick-start), then run installation commands from that checkout.
+Use the [source checkout instructions](../README.md#source-installation), then run installation commands from that checkout.
 
 ## Provider Comparison
 

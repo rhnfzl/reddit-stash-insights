@@ -97,53 +97,34 @@ def index(
 
     try:
         # allow_incomplete: re-running over a crashed build resumes it (rows are upserted).
-        engine = SearchEngine(db_path=db_path, settings=settings, verify=not rebuild, allow_incomplete=True)
+        engine = SearchEngine(db_path=db_path, settings=settings, verify=not rebuild, allow_incomplete=True, writing=True)
     except IndexConfigMismatch as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(EXIT_MISMATCH)
-    if rebuild:
-        remove_meta(db_path)
-        engine.store.drop()
-
-    texts = []
-    ids = []
-    metadata = []
-
-    for post in scan_result.posts:
-        texts.append(post.search_text()[:settings.max_text_chars])
-        ids.append(post.id)
-        metadata.append({
-            "subreddit": post.subreddit,
-            "score": post.score,
-            "timestamp": str(post.timestamp or ""),
-            "file_path": post.file_path,
-            "content_type": "post",
-            "source": post.source,
-        })
-
-    for comment in scan_result.comments:
-        texts.append(comment.search_text()[:settings.max_text_chars])
-        ids.append(comment.id)
-        metadata.append({
-            "subreddit": comment.subreddit,
-            "score": comment.score,
-            "timestamp": str(comment.timestamp or ""),
-            "file_path": comment.file_path,
-            "content_type": "comment",
-            "source": comment.source,
-        })
-
-    del scan_result  # the parsed bodies are no longer needed; free them before embedding
+    from itertools import chain
 
     provider, model = engine.embedder_identity()
     if provider == "local":
         typer.echo("Loading embedding model (first run downloads ~2GB)...")
-    typer.echo(f"Embedding {len(texts)} items with {provider}/{model}...")
-    # Mark the build unfinished before the first row, so readers refuse it until the final write_meta.
-    write_meta(db_path, provider=provider, model=model, dim=0, rows=0, parse_errors=n_errors, complete=False)
-    dim = engine.index_texts(texts=texts, ids=ids, metadata=metadata)
-    write_meta(db_path, provider=provider, model=model, dim=dim, rows=engine.store.count(), parse_errors=n_errors)
-    typer.echo(f"Indexed {len(texts)} items to {db_path}")
+    try:
+        input_token_capacity = engine.validate_index_settings()
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2)
+    if rebuild:
+        remove_meta(db_path)
+        engine.store.drop()
+
+    typer.echo(f"Embedding passages from {n_items} items with {provider}/{model}...")
+    # Readers must refuse partial rows until embedding and the full-text index both finish.
+    write_meta(db_path, provider=provider, model=model, dim=0, rows=0, parse_errors=n_errors,
+               complete=False, chunk_tokens=settings.chunk_tokens, chunk_overlap=settings.chunk_overlap,
+               input_token_capacity=input_token_capacity)
+    dim = engine.index_items(chain(scan_result.posts, scan_result.comments))
+    write_meta(db_path, provider=provider, model=model, dim=dim, rows=engine.store.count(), parse_errors=n_errors,
+               chunk_tokens=settings.chunk_tokens, chunk_overlap=settings.chunk_overlap,
+               input_token_capacity=input_token_capacity)
+    typer.echo(f"Indexed {n_items} items as {engine.store.count()} passages to {db_path}")
 
 
 @app.command()
@@ -520,7 +501,8 @@ def evaluate_search(
                 "provider": settings.embedding_provider, "model": settings.embedding_model,
             }, "index": index_identity, "config": {"mode": mode, "split": split, "cutoff": 10,
                   "candidate_depths": [50, 100, 200], "thread_order": "first occurrence",
-                  "allow_remote": allow_remote, "max_text_chars": settings.max_text_chars,
+                  "allow_remote": allow_remote, "chunk_tokens": settings.chunk_tokens,
+                  "chunk_overlap": settings.chunk_overlap,
                   "index_chunk_size": settings.index_chunk_size, "embedding_use_fp16": settings.embedding_use_fp16},
                 "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
                 "qrels_sha256": hashlib.sha256(qrels.read_bytes()).hexdigest()}
@@ -534,3 +516,26 @@ def evaluate_search(
                f"{report['error_count']} errors. Report: {output}")
     if report["error_count"]:
         raise typer.Exit(1)
+
+
+@app.command()
+def ui(
+    port: int = typer.Option(8501, "--port", min=1, max=65535, help="Local web interface port"),
+) -> None:
+    """Open the installed web interface on this computer."""
+    import importlib.util
+    import subprocess
+    import sys
+
+    if importlib.util.find_spec("streamlit") is None:
+        typer.echo("Install UI support with pip install 'reddit-stash-insights[ui]'", err=True)
+        raise typer.Exit(1)
+    script = Path(__file__).parent / "ui" / "chat.py"
+    try:
+        result = subprocess.run([
+            sys.executable, "-m", "streamlit", "run", str(script),
+            "--server.address", "127.0.0.1", "--server.port", str(port),
+        ])
+    except KeyboardInterrupt:
+        raise typer.Exit(130)
+    raise typer.Exit(result.returncode)

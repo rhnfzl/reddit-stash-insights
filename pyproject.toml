@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "reddit-stash-insights"
 version = "0.1.0"
 description = "Semantic search and AI chat for reddit-stash archives"
+readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
@@ -40,6 +41,7 @@ mcp = [
     "uvicorn>=0.30",
 ]
 ui = [
+    "reddit-stash-insights[index]",
     "streamlit>=1.54",
 ]
 all = [
@@ -63,6 +65,22 @@ Documentation = "https://github.com/rhnfzl/reddit-stash-insights#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rsi"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+    "/noxfile.py",
+    "/docs/evaluation.md",
+    "/docs/configuration.md",
+    "/docs/providers.md",
+    "/docs/mcp.md",
+    "/docs/assets",
+]
+exclude = ["/tests/fixtures/rag_test_questions.json"]
 
 [tool.ruff]
 target-version = "py311"

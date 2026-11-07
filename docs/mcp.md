@@ -4,7 +4,7 @@ reddit-stash-insights includes an [MCP (Model Context Protocol)](https://modelco
 
 ## Prerequisites
 
-Follow the [source checkout instructions](../README.md#quick-start) before installing extras.
+Follow the [source checkout instructions](../README.md#source-installation) before installing extras.
 
 1. **Index your archive first**, the MCP server needs an existing search index:
    ```bash

@@ -5,6 +5,21 @@ from pathlib import Path
 
 
 class TestVectorStore(unittest.TestCase):
+    def test_chunk_upserts_preserve_sibling_passages(self):
+        from rsi.indexer.vector_store import VectorStore
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = VectorStore(Path(tmpdir))
+            records = [{"id": "p", "content_type": "post", "chunk_id": f"post:p:{i}",
+                        "source_doc_id": "post:p", "generation": "old", "text": f"passage {i}",
+                        "vector": [0.1] * 4} for i in range(3)]
+            store.add_records(records)
+            store.add_records(records)
+            self.assertEqual(store.count(), 3)
+            store.add_records([{**records[0], "generation": "new", "text": "replacement"}])
+            store.remove_stale_chunks("post:p", "new")
+            self.assertEqual(store.count(), 1)
+            self.assertEqual(store.sample_texts(1), ["replacement"])
+
     def test_filter_values_are_literals_in_all_search_modes(self):
         from rsi.indexer.vector_store import VectorStore
 

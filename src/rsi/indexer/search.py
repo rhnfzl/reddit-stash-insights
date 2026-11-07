@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from rsi.core.identity import canonical_doc_id
+from rsi.core.models import Comment, Post
+from rsi.indexer.chunker import iter_chunks
 from rsi.indexer.embedder import make_embedder
-from rsi.indexer.index_meta import check_compatible
+from rsi.indexer.index_meta import IndexConfigMismatch, check_compatible
 from rsi.indexer.vector_store import VectorStore
 
 if TYPE_CHECKING:
@@ -41,6 +45,7 @@ class SearchEngine:
         settings: Optional["Settings"] = None,
         verify: bool = True,
         allow_incomplete: bool = False,
+        writing: bool = False,
     ):
         if settings is None:
             from rsi.config import Settings
@@ -55,6 +60,7 @@ class SearchEngine:
             provider, model = self.embedder_identity()
             check_compatible(
                 self._db_path, self._store.has_table(), provider, model, allow_incomplete=allow_incomplete,
+                chunk_tokens=settings.chunk_tokens, chunk_overlap=settings.chunk_overlap, writing=writing,
             )
 
     @property
@@ -92,6 +98,8 @@ class SearchEngine:
         chunk_size = self._settings.index_chunk_size if chunk_size is None else chunk_size
         if chunk_size < 1:
             raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+        if self._store.has_table():
+            raise IndexConfigMismatch("raw text indexing requires a fresh directory; use index_items for passages")
         embedder = self._get_embedder()
         dim = 0
         for start in range(0, len(texts), chunk_size):
@@ -110,6 +118,61 @@ class SearchEngine:
             self._store.create_fts_index()
         return dim
 
+    def validate_index_settings(self) -> int:
+        """Reject passage budgets that the active encoder would silently truncate."""
+        capacity = self._get_embedder().max_input_tokens
+        if type(capacity) is not int or capacity < 1:
+            raise ValueError("embedding capacity must be a positive integer")
+        tokens, overlap = self._settings.chunk_tokens, self._settings.chunk_overlap
+        if type(tokens) is not int or type(overlap) is not int or not 0 <= overlap < tokens:
+            raise ValueError("chunk tokens must be positive and 0 <= overlap < chunk tokens")
+        if tokens > capacity:
+            raise ValueError(f"chunk_tokens {tokens} exceeds embedding capacity {capacity}; reduce RSI_CHUNK_TOKENS")
+        if self._settings.index_chunk_size < 1:
+            raise ValueError("index batch size must be positive")
+        return capacity
+
+    def index_items(self, items: Iterable[Post | Comment]) -> int:
+        """Stream passages and vectors in bounded batches; replace each source after embedding."""
+        provider, model = self.embedder_identity()
+        check_compatible(self._db_path, self._store.has_table(), provider, model, allow_incomplete=True,
+                         chunk_tokens=self._settings.chunk_tokens, chunk_overlap=self._settings.chunk_overlap,
+                         writing=True)
+        self.validate_index_settings()
+        embedder = self._get_embedder()
+        batch_size = self._settings.index_chunk_size
+        batch: list[dict[str, Any]] = []
+        finished: list[tuple[str, str]] = []
+        dim = 0
+
+        def flush() -> None:
+            nonlocal dim
+            if batch:
+                dense = embedder.embed([row["text"] for row in batch])["dense"]
+                if len(dense) != len(batch) or not dense or not dense[0]:
+                    raise RuntimeError("embedder returned an invalid passage vector batch")
+                dim = len(dense[0])
+                self._store.add_records([{**row, "vector": vector} for row, vector in zip(batch, dense)])
+                batch.clear()
+            for source, generation in finished:
+                self._store.remove_stale_chunks(source, generation)
+            finished.clear()
+
+        for item in items:
+            last = None
+            for row in iter_chunks(item, encode=embedder.encode, decode=embedder.decode,
+                                   max_tokens=self._settings.chunk_tokens, overlap=self._settings.chunk_overlap):
+                batch.append(row)
+                last = row
+                if len(batch) >= batch_size:
+                    flush()
+            if last is not None:
+                finished.append((last["source_doc_id"], last["generation"]))
+        flush()
+        if self._store.has_table():
+            self._store.create_fts_index()
+        return dim
+
     def search(
         self,
         query: str,
@@ -117,22 +180,30 @@ class SearchEngine:
         mode: SearchMode = SearchMode.HYBRID,
         subreddit: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Search indexed content."""
-        if mode == SearchMode.KEYWORD:
-            return self._store.fts_search(query, limit=limit, subreddit=subreddit)
-
-        embedder = self._get_embedder()
-        query_emb = embedder.embed_query(query)
-
-        if mode == SearchMode.SEMANTIC:
-            return self._store.vector_search(
-                query_emb["dense"], limit=limit, subreddit=subreddit
-            )
-
-        # Default: hybrid
-        return self._store.hybrid_search(
-            query=query,
-            query_vector=query_emb["dense"],
-            limit=limit,
-            subreddit=subreddit,
-        )
+        """Return the best passage for each unique source thread."""
+        if type(limit) is not int or limit < 1:
+            raise ValueError("search limit must be a positive integer")
+        vector: list[float] = []
+        if mode != SearchMode.KEYWORD:
+            vector = self._get_embedder().embed_query(query)["dense"]
+        results: list[dict[str, Any]] = []
+        for candidate_limit in (max(50, limit), max(100, 2 * limit), max(200, 4 * limit)):
+            if mode == SearchMode.KEYWORD:
+                rows = self._store.fts_search(query, limit=candidate_limit, subreddit=subreddit)
+            elif mode == SearchMode.SEMANTIC:
+                rows = self._store.vector_search(vector, limit=candidate_limit, subreddit=subreddit)
+            else:
+                rows = self._store.hybrid_search(query=query, query_vector=vector,
+                                                 limit=candidate_limit, subreddit=subreddit)
+            seen: set[str] = set()
+            results = []
+            for row in rows:
+                identity = canonical_doc_id(row)
+                if identity not in seen:
+                    seen.add(identity)
+                    results.append(row)
+                    if len(results) >= limit:
+                        return results
+            if len(rows) < candidate_limit:
+                break
+        return results
