@@ -5,6 +5,7 @@
 Compare search settings on private data without publishing personal results.
 
 - Keep personal evaluation data and all derived reports local. Add repository privacy checks and document the public fictional fixture.
+- Replace inherited archive-derived parser examples with fictional test fixtures.
 - Evaluate supplied indexes through the public source-thread search interface; keep raw passage diagnostics separate.
 - Document local dataset templates, frozen test splits and the limits of retrieval-only scores.
 

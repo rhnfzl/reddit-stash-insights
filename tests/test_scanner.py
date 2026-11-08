@@ -20,7 +20,7 @@ class TestFileLog(unittest.TestCase):
         from rsi.core.file_log import read_file_log
 
         entries = read_file_log(FIXTURES / "sample_file_log.json")
-        post_entry = entries["1grc5bi-Python-Submission-POST"]
+        post_entry = entries["fictionalpost-Python-Submission-POST"]
         self.assertEqual(post_entry["subreddit"], "Python")
         self.assertEqual(post_entry["type"], "Submission")
 
@@ -66,14 +66,14 @@ class TestScanner(unittest.TestCase):
         from rsi.core.scanner import scan_directory
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            sub_dir = Path(tmpdir) / "fitbod"
+            sub_dir = Path(tmpdir) / "synthetic"
             sub_dir.mkdir()
             comment = sub_dir / "COMMENT_xyz.md"
-            comment.write_text("---\nComment by /u/testuser\n- **Upvotes:** 1 | **Permalink:** [Link](https://reddit.com/r/fitbod/comments/abc/test/xyz/)\nComment body here\n\n---\n\n## Context: Post by /u/other\n- **Title:** Parent Title\n- **Upvotes:** 5 | **Permalink:** [Link](https://reddit.com/r/fitbod/comments/abc/test/)\n")
+            comment.write_text("---\nComment by /u/testuser\n- **Upvotes:** 1 | **Permalink:** [Link](https://reddit.com/r/synthetic/comments/abc/test/xyz/)\nComment body here\n\n---\n\n## Context: Post by /u/other\n- **Title:** Parent Title\n- **Upvotes:** 5 | **Permalink:** [Link](https://reddit.com/r/synthetic/comments/abc/test/)\n")
 
             results = scan_directory(Path(tmpdir))
             self.assertEqual(len(results.comments), 1)
-            self.assertEqual(results.comments[0].subreddit, "fitbod")
+            self.assertEqual(results.comments[0].subreddit, "synthetic")
 
     def test_scan_directory_returns_scan_result(self):
         from rsi.core.scanner import scan_directory, ScanResult
