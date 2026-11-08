@@ -6,14 +6,14 @@
       "kind": "research",
       "slug": "reddit-stash-insights-0-1-0-case-study",
       "title": "Reddit Stash Insights 0.1.0 case study",
-      "summary": "Preserve evidence from long Reddit threads and measure retrieval before the first public package release.",
+      "summary": "Published 0.1.0 retains more judged evidence on an authored private test set, with explicit indexing costs and evaluation limits.",
       "keywords": [
         "reddit",
         "retrieval",
         "evaluation",
         "release"
       ],
-      "source": "RSI 78e00b8 baseline and release branch; local frozen archive evaluation",
+      "source": "Published v0.1.0, sanitized aggregate record and 78e00b8 baseline",
       "href": "2026-11-07-research-reddit-stash-insights-0-1-0-case-study.html"
     },
     {
