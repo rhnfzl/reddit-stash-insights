@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
-# Pre-push hook: runs ruff + mypy on changed Python files vs upstream.
-# Fail-open: warns but doesn't block if tools aren't installed.
+# Check evaluation privacy, then run ruff and mypy on changed Python files.
+# Missing quality tools warn; an unavailable privacy check blocks the push.
 set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
+    PRIVACY_PYTHON="$REPO_ROOT/.venv/bin/python"
+elif command -v python3 &>/dev/null; then
+    PRIVACY_PYTHON=$(command -v python3)
+else
+    echo "[pre-push] Python is required to check evaluation privacy. Push blocked."
+    exit 1
+fi
+if [ "$#" -ge 2 ]; then
+    "$PRIVACY_PYTHON" "$REPO_ROOT/scripts/check_eval_privacy.py" --pre-push
+else
+    "$PRIVACY_PYTHON" "$REPO_ROOT/scripts/check_eval_privacy.py" --ref HEAD
+fi
 
 # Determine upstream branch to diff against.
 UPSTREAM=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo "origin/main")

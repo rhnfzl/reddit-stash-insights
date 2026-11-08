@@ -43,20 +43,20 @@ class TestEvalCommand(unittest.TestCase):
         self.assertEqual([call.kwargs["limit"] for call in store.fts_search.call_args_list], [50])
 
     @unittest.skipUnless(importlib.util.find_spec("lancedb"), "index extra not installed")
-    def test_external_evaluation_reports_actual_raw_candidate_depth(self):
+    def test_external_evaluation_measures_public_thread_search_without_raw_overfetch(self):
         from rsi.evaluation import export_fixture
 
         depths = []
         engine = MagicMock()
         engine.store.count.return_value = 120
-        engine.search.side_effect = AssertionError("evaluation must not deduplicate candidates twice")
+        engine.search_candidates.side_effect = AssertionError("evaluation must use public source-thread search")
 
         def candidates(query, *, limit, mode, subreddit):
             depths.append(limit)
-            return [{"id": f"chunk{i}", "content_type": "post", "parent_doc_id": f"post:f{i // 12 + 1:03}"}
-                    for i in range(min(limit, 120))]
+            return [{"id": f"chunk{i}", "content_type": "post", "parent_doc_id": f"post:f{i + 1:03}"}
+                    for i in range(min(limit, 10))]
 
-        engine.search_candidates.side_effect = candidates
+        engine.search.side_effect = candidates
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             export_fixture(root / "fixture")
@@ -70,9 +70,10 @@ class TestEvalCommand(unittest.TestCase):
                 result = CliRunner().invoke(app, args, env={"RSI_EMBEDDING_PROVIDER": "local"})
             self.assertEqual(result.exit_code, 0, result.output + repr(result.exception))
             report = json.loads((root / "run.json").read_text())
-        self.assertEqual(depths[:3], [50, 100, 200])
-        self.assertTrue(all(row["candidate_depth"] == 200 for row in report["queries"]))
-        engine.search.assert_not_called()
+        self.assertTrue(depths and all(depth == 10 for depth in depths))
+        self.assertTrue(all(row["candidate_depth"] is None for row in report["queries"]))
+        self.assertEqual(report["retrieval_unit"], "source_threads")
+        engine.search_candidates.assert_not_called()
 
     def test_fixture_rejects_semantic_and_missing_explicit_inputs(self):
         runner = CliRunner()

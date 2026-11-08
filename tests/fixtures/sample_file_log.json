@@ -1,12 +1,12 @@
 {
-    "1grc5bi-Python-Submission-POST": {
+    "fictionalpost-Python-Submission-POST": {
         "subreddit": "Python",
         "type": "Submission",
-        "file_path": "Python/POST_1grc5bi.md"
+        "file_path": "Python/POST_fictionalpost.md"
     },
-    "nepvcs7-fitbod-Comment-COMMENT": {
-        "subreddit": "fitbod",
+    "fictionalcomment-synthetic-Comment-COMMENT": {
+        "subreddit": "synthetic",
         "type": "Comment",
-        "file_path": "fitbod/COMMENT_nepvcs7.md"
+        "file_path": "synthetic/COMMENT_fictionalcomment.md"
     }
 }

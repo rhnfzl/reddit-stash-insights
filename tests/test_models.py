@@ -8,16 +8,16 @@ class TestPost(unittest.TestCase):
         from rsi.core.models import Post
 
         post = Post(
-            id="1njd7m5",
-            subreddit="fitbod",
-            title="Fitbod Screen Stuck",
+            id="fictionalthread",
+            subreddit="synthetic",
+            title="Fictional Garden Plan",
             body="Some body text",
-            permalink="https://reddit.com/r/fitbod/comments/1njd7m5/fitbod_screen_stuck/",
-            file_path="fitbod/POST_1njd7m5.md",
+            permalink="https://reddit.com/r/synthetic/comments/fictionalthread/fictional_garden_plan/",
+            file_path="synthetic/POST_fictionalthread.md",
         )
-        self.assertEqual(post.id, "1njd7m5")
-        self.assertEqual(post.subreddit, "fitbod")
-        self.assertEqual(post.title, "Fitbod Screen Stuck")
+        self.assertEqual(post.id, "fictionalthread")
+        self.assertEqual(post.subreddit, "synthetic")
+        self.assertEqual(post.title, "Fictional Garden Plan")
 
     def test_post_optional_fields_default_to_none(self):
         from rsi.core.models import Post
@@ -39,21 +39,21 @@ class TestPost(unittest.TestCase):
     def test_post_with_all_fields(self):
         from rsi.core.models import Post
 
-        ts = datetime(2025, 9, 17, 13, 29, 49)
+        ts = datetime(2020, 1, 2, 3, 4, 5)
         post = Post(
-            id="1njd7m5",
-            subreddit="fitbod",
-            title="Fitbod Screen Stuck",
+            id="fictionalthread",
+            subreddit="synthetic",
+            title="Fictional Garden Plan",
             body="Body text here",
             permalink="https://reddit.com/...",
-            file_path="fitbod/POST_1njd7m5.md",
-            author="complexrexton",
+            file_path="synthetic/POST_fictionalthread.md",
+            author="fixture_author",
             timestamp=ts,
             flair="Showcase",
             score=12,
             comment_count=3,
         )
-        self.assertEqual(post.author, "complexrexton")
+        self.assertEqual(post.author, "fixture_author")
         self.assertEqual(post.timestamp, ts)
         self.assertEqual(post.flair, "Showcase")
         self.assertEqual(post.score, 12)
@@ -77,15 +77,15 @@ class TestComment(unittest.TestCase):
         from rsi.core.models import Comment
 
         comment = Comment(
-            id="nepvcs7",
-            subreddit="fitbod",
-            author="complexrexton",
-            body="Thank you it's working now",
-            permalink="https://reddit.com/r/fitbod/.../nepvcs7/",
-            file_path="fitbod/COMMENT_nepvcs7.md",
+            id="fictionalcomment",
+            subreddit="synthetic",
+            author="fixture_author",
+            body="The blue planter belongs by the window.",
+            permalink="https://reddit.com/r/synthetic/.../fictionalcomment/",
+            file_path="synthetic/COMMENT_fictionalcomment.md",
         )
-        self.assertEqual(comment.id, "nepvcs7")
-        self.assertEqual(comment.subreddit, "fitbod")
+        self.assertEqual(comment.id, "fictionalcomment")
+        self.assertEqual(comment.subreddit, "synthetic")
 
     def test_comment_search_text(self):
         from rsi.core.models import Comment

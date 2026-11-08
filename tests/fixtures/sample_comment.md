@@ -1,16 +1,16 @@
 ---
-Comment by /u/complexrexton
-- **Upvotes:** 1 | **Permalink:** [Link](https://reddit.com/r/fitbod/comments/1njd7m5/fitbod_screen_stuck/nepvcs7/)
-Thank you it's working now
+Comment by /u/fixture_author
+- **Upvotes:** 2 | **Permalink:** [Link](https://reddit.com/r/synthetic/comments/fictionalthread/fictional_garden_plan/fictionalcomment/)
+The blue planter belongs by the window.
 
 ---
 
-## Context: Parent Comment by /u/JessAtFitbod
-- **Upvotes:** 1 | **Permalink:** [Link](https://reddit.com/r/fitbod/comments/1njd7m5/fitbod_screen_stuck/nepk9wc/)
-We just released a fix!
+## Context: Parent Comment by /u/fixture_parent
+- **Upvotes:** 3 | **Permalink:** [Link](https://reddit.com/r/synthetic/comments/fictionalthread/fictional_garden_plan/fictionalparent/)
+Which planter goes by the window?
 
 ---
 
-## Context: Post by /u/complexrexton
-- **Title:** Fitbod Screen Stuck
-- **Upvotes:** 1 | **Permalink:** [Link](https://reddit.com/r/fitbod/comments/1njd7m5/fitbod_screen_stuck/)
+## Context: Post by /u/fixture_author
+- **Title:** Fictional Garden Plan
+- **Upvotes:** 4 | **Permalink:** [Link](https://reddit.com/r/synthetic/comments/fictionalthread/fictional_garden_plan/)

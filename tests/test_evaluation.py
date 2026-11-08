@@ -151,6 +151,24 @@ if __name__ == "__main__":
 
 
 class TestReports(unittest.TestCase):
+    def test_public_thread_results_preserve_first_alias_and_requested_cutoff(self):
+        snapshot = {"sha256": "fixed", "documents": ["post:a", "post:b"],
+                    "aliases": {"comment:c": "post:a"}}
+        calls = []
+
+        def search(query, **kwargs):
+            calls.append(kwargs)
+            return [{"id": "a", "content_type": "post"}, {"id": "b", "content_type": "post"},
+                    {"id": "c", "content_type": "comment"}]
+
+        report = evaluate([{"query_id": "q", "query": "fact", "answerable": True, "split": "dev", "tags": []}],
+                          {"q": {"post:a": 2}}, snapshot, search, mode="keyword", split="dev", identity={},
+                          thread_search=True)
+        self.assertEqual(calls, [{"limit": 10, "mode": "keyword", "subreddit": None}])
+        self.assertEqual([r["doc_id"] for r in report["queries"][0]["ranking"]], ["post:a", "post:b"])
+        self.assertEqual(report["queries"][0]["ranking"][0]["evidence_id"], "post:a")
+        self.assertIsNone(report["queries"][0]["candidate_depth"])
+
     def setUp(self):
         self.queries = [{"query_id": "a", "query": "water", "answerable": True, "split": "dev", "tags": []},
                         {"query_id": "b", "query": "missing", "answerable": False, "split": "dev", "tags": []}]

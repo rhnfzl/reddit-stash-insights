@@ -1,15 +1,15 @@
 ---
-id: 1grc5bi
+id: fictionalpost
 subreddit: /r/Python
-timestamp: 2024-11-14 18:52:30
-author: /u/complexrexton
-flair: Showcase
-comments: 7
-permalink: https://reddit.com/r/Python/comments/1grc5bi/squeakycleantext_a_modular_text_processing/
+timestamp: 2020-01-02 03:04:05
+author: /u/fixture_author
+flair: Example
+comments: 2
+permalink: https://reddit.com/r/Python/comments/fictionalpost/fictional_bookshelf_guide/
 ---
 
-# SqueakyCleanText: A Modular Text Processing Library
+# Fictional Bookshelf Guide
 
-**Upvotes:** 12 | **Permalink:** [Link](https://reddit.com/r/Python/comments/1grc5bi/squeakycleantext_a_modular_text_processing/)
+**Upvotes:** 5 | **Permalink:** [Link](https://reddit.com/r/Python/comments/fictionalpost/fictional_bookshelf_guide/)
 
-I've been working on a Python library for text preprocessing that handles common NLP cleaning tasks in a modular way. It supports configurable pipelines for tokenization, normalization, and filtering.
+This fictional example sorts a bookshelf by color. The blue books go on the top shelf.
