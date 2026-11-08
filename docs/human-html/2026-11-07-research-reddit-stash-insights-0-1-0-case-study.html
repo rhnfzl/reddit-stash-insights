@@ -6,10 +6,11 @@
   <meta name="artifact-kind" content="research">
   <meta name="artifact-audience" content="human">
   <meta name="artifact-created" content="2026-11-07">
-  <meta name="artifact-source" content="RSI 78e00b8 baseline and release branch; local frozen archive evaluation">
-  <meta name="artifact-read-time" content="7 min">
+  <meta name="artifact-modified" content="2026-11-08">
+  <meta name="artifact-source" content="Published v0.1.0, sanitized aggregate record and 78e00b8 baseline">
+  <meta name="artifact-read-time" content="12 min">
   <!-- Gallery card text. Leave empty to auto-derive from the summary block; fill for a sharper one-liner. -->
-  <meta name="artifact-summary" content="Preserve evidence from long Reddit threads and measure retrieval before the first public package release.">
+  <meta name="artifact-summary" content="Published 0.1.0 retains more judged evidence on an authored private test set, with explicit indexing costs and evaluation limits.">
   <meta name="artifact-keywords" content="reddit, retrieval, evaluation, release">
   <title>Reddit Stash Insights 0.1.0 case study</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E🔬%3C/text%3E%3C/svg%3E">
@@ -336,48 +337,55 @@
   <button class="theme-toggle" type="button" aria-label="Switch theme" title="Toggle light / dark"></button>
   <main>
     <header>
-      <p class="eyebrow">Release case study · draft until publication</p>
-      <div class="meta-ribbon" data-meta-ribbon="true">Owner: Rehan · Status: draft · Date: 2026-11-07 · Tags: retrieval, release</div>
+      <p class="eyebrow">Published release case study · 0.1.0</p>
+      <div class="meta-ribbon" data-meta-ribbon="true">Owner: Rehan · Status: published release · Created: 2026-11-07 · Updated: 2026-11-08 · Tags: retrieval, release</div>
       <h1>Finding evidence in saved Reddit threads</h1>
       <p>Reddit Stash Insights 0.1.0 makes saved posts searchable, preserves later comments, and cites the evidence used in answers.</p>
-      <p>Release status: local checks pass. The final private comparison and public PyPI installation remain pending.</p>
+      <p><a href="https://pypi.org/project/reddit-stash-insights/0.1.0/">Version 0.1.0 is published on PyPI</a>. The public artifacts match the tested distributions, and a fresh registry installation passes the packaged fixture.</p>
     </header>
     <section id="lead-summary" data-summary="true" class="lead-summary">
       <h2>What changes for users</h2>
       <ul>
-        <li><strong>Find saved evidence:</strong> Search can reach passages throughout a thread and group results by source thread.</li>
-        <li><strong>Check the result:</strong> Answers cite the included passages, comment references and source offsets.</li>
-        <li><strong>Try the package:</strong> The release adds an installed web launcher and a public fictional evaluation fixture.</li>
-        <li><strong>Limit:</strong> Publication and the final private comparison must pass before this draft becomes a release report.</li>
+        <li><strong>Find saved evidence:</strong> Search can reach passages throughout an exported thread and group results by source thread.</li>
+        <li><strong>Measured change:</strong> On 30 held-out authored questions, hybrid ranking quality improves on seven, stays unchanged on 21, and declines on two.</li>
+        <li><strong>Try the package:</strong> The public quickstart evaluates fictional examples without installing Torch. The installed web launcher also passes its health check.</li>
+        <li><strong>Limit:</strong> These are authored questions with incomplete known-source labels. Real user failures and broader human judgments could change the conclusion.</li>
       </ul>
     </section>
     <nav class="toc" aria-label="Contents"><ol>
       <li><a href="#question">The problem</a></li><li><a href="#method">How we checked it</a></li>
-      <li><a href="#findings">Before and after</a></li><li><a href="#results">Measured results</a></li>
+      <li><a href="#findings">Before and after</a></li><li><a href="#results">Measured results and costs</a></li>
       <li><a href="#synthesis">What ships</a></li><li><a href="#open">Limits and follow-up</a></li>
     </ol></nav>
     <section id="question" class="section">
       <h2>The problem</h2>
       <p>A saved answer can appear deep inside a long discussion. The old pipeline could omit that evidence at several stages.</p>
       <p>Indexing capped each item at 32,000 characters. The local embedding wrapper also used a hidden 512-token input limit.
-      Chat then showed only the first 500 characters of each result. The README also described features that had no implementation.</p>
+      Saved comment parsing could drop exported parent context and replies. Chat then showed only the first 500 characters of each result.</p>
       <p>The earlier LlamaIndex comparison is withdrawn. Its scoring paths were inconsistent, and this release makes no comparison claim against LlamaIndex.</p>
     </section>
     <section id="method" class="section">
       <h2>How we checked it</h2>
-      <p>We freeze the data and labels before measuring search. A separate agent checks the reference answers against source evidence.</p>
+      <p>We froze the archive and labels before the paired comparison. Independent agent review checked the evidence and final reports.</p>
       <p>The private snapshot contains 2,353 parsed items from 2,815 Markdown files, with no parser errors.
-      It resolves to 1,743 source threads. Fifty answerable questions use 20 development cases and 30 held-out cases.
-      Ten additional controls check absence within a named subject. They do not prove absence across the whole archive.</p>
-      <p>Private labels identify known source evidence. They are incomplete relevance judgments, so recall measures recovery of judged sources.
-      The labels received independent agent review. They have not received human review.</p>
+      It resolves to 1,743 source threads. The 60 private questions include 50 answerable cases and ten subject-scoped absence controls.</p>
+      <p>Answerable cases use 20 development and 30 held-out questions. Absence controls use five development and five held-out questions.
+      The five/five control split differs from the planned four/six split. Frozen labels remain unchanged.
+      These controls do not prove absence across the whole archive.</p>
+      <p>Private questions were authored from source facts to target known retrieval regressions.
+      They were not collected as queries from independent users.</p>
+      <p>Private relevance labels identify known source evidence. They are incomplete judgments, so recall measures recovery of judged sources.
+      Independent agents reviewed the labels. No human relevance review is claimed.</p>
       <p>The public fixture contains 50 original fictional questions and ten absent-answer controls.
-      Its 2,500 exhaustive relevance labels test scoring and installation. Its repeated filler does not represent natural thread complexity.</p>
-      <p>Both private indexes use the same copied archive and cached BGE-M3 weights.
-      The final paired run uses the same device, precision, query grouping and scoring code.
-      The old index is built from commit <code>78e00b8</code>. Development results guide the change before held-out results are opened.</p>
-      <pre><code>rsi eval --fixture --mode keyword --split all --output evaluation.json</code></pre>
-      <p><a href="../evaluation.md">Evaluation protocol and metric definitions</a> describe hashes, raw rankings, errors and unknown labels.</p>
+      Its 2,500 relevance labels cover every pair of 50 answerable questions and 50 source threads.
+      They test scoring and installation. Repeated filler does not represent natural thread complexity.</p>
+      <p>Both private indexes use the same copied archive and cached BGE-M3 revision.
+      The baseline uses commit <code>78e00b8</code>. Device, configured precision, query grouping and scoring code stay fixed.
+      The release combines parser, passage, retrieval and chat-context repairs; it does not isolate the effect of chunking alone.</p>
+      <p>The held-out evaluation ran once. No settings changed after its results were opened.
+      Independent review passes all 12 final reports and 18 paired metric intervals. The predefined held-out hybrid ranking gate passes.</p>
+      <p><a href="https://github.com/rhnfzl/reddit-stash-insights/blob/v0.1.0/docs/evaluation.md">Versioned evaluation protocol and metric definitions</a> explain hashes, raw rankings, errors and unknown labels.
+      <a href="https://github.com/rhnfzl/reddit-stash-insights/blob/main/docs/references/2026-11-08-rsi-0.1.0-aggregate.json">The sanitized aggregate record</a> supplies the benchmark tables, runtime details and release checks below.</p>
     </section>
     <section id="findings" class="section">
       <h2>Before and after</h2>
@@ -385,55 +393,171 @@
         <thead><tr><th>Stage</th><th>Before</th><th>0.1.0</th></tr></thead>
         <tbody>
           <tr><td>Embedding input</td><td>One truncated item</td><td>Bounded passages covering the full parsed body</td></tr>
-          <tr><td>Comments</td><td>Nested text without passage identity</td><td>Comment IDs, parent IDs, links and exact offsets</td></tr>
+          <tr><td>Comments</td><td>Primary text retained; exported context could be dropped</td><td>Full rendered exports with evidence IDs, exported parent links and offsets</td></tr>
           <tr><td>Search results</td><td>Item rows</td><td>Unique source threads from bounded candidate pools</td></tr>
           <tr><td>Chat context</td><td>First 500 characters</td><td>Whole passages within the model input budget</td></tr>
           <tr><td>Cloud fallback</td><td>Implicit hosted fallback possible</td><td>Explicit opt-in and a visible destination</td></tr>
           <tr><td>Evaluation</td><td>Unshared scripts and inconsistent scores</td><td>Packaged fixture, frozen labels and raw report output</td></tr>
         </tbody>
       </table></div>
-      <p>Adjacent short comments share a passage when they fit. Each included comment retains a separate evidence reference.
+      <p>Adjacent short comments share a passage when they fit. Recognized comment sections retain separate evidence references.
+      Recovered parent context can use the containing archive reference.
       Whole paragraph boundaries remain separate; overlap applies inside oversized paragraphs.</p>
-      <p>Full-corpus checks verify passage token limits, source coverage and advancing offsets.
+      <p>Saved comment exports retain rendered parent threads and replies, including text written by other authors.
+      Root comment IDs, authors, links and scores remain unchanged. Source references follow exported nesting and fallback links.
+      They do not reconstruct a complete comment graph. Existing comment archives must be reindexed to include the recovered context.</p>
+      <p>Parsed source texts retained 110 of 117 known literal quotes before the comment-parser repair.
+      They retain all 117 afterward, recovering 7 quotes.
+      This is an extraction diagnostic, not a retrieval score.</p>
+      <p>The final index contains 138,085 verified passages, each at most 512 embedding tokens.
+      Checks cover payload identity, source coverage and advancing offsets.
       Synthetic regressions cover Unicode, whitespace paragraph separators and tokenizer boundary effects.</p>
     </section>
     <section id="results" class="section">
-      <h2>Measured results</h2>
-      <p>Final paired results are pending. No improvement percentage is claimed in this draft.</p>
+      <h2>Measured results and costs</h2>
+      <p>Judged-source ranking improves on this authored test set. Storage increases; build measurements describe staged work rather than a cold final build.</p>
+      <p>All values below compare the baseline with 0.1.0. Recall@10 measures recovered judged sources.
+      <abbr title="Mean reciprocal rank">MRR@10</abbr> rewards an early first relevant result.
+      <abbr title="Normalized discounted cumulative gain">nDCG@10</abbr> rewards useful ordering, including graded relevance.</p>
       <div class="table-scroll"><table id="retrieval-results">
+        <caption>Known-source ranking metrics: before → 0.1.0. Quality metrics use answerable questions only.</caption>
         <thead><tr><th>Split / mode</th><th>Recall@10</th><th>MRR@10</th><th>nDCG@10</th></tr></thead>
-        <tbody><tr><td colspan="4">Populate only from completed final reports with zero retrieval errors.</td></tr></tbody>
+        <tbody>
+          <tr><th scope="row">Development / keyword (n=20)</th><td>0.900000 → 1.000000</td><td>0.862500 → 1.000000</td><td>0.871534 → 1.000000</td></tr>
+          <tr><th scope="row">Development / semantic (n=20)</th><td>1.000000 → 1.000000</td><td>0.862500 → 0.926667</td><td>0.897720 → 0.944343</td></tr>
+          <tr><th scope="row">Development / hybrid (n=20)</th><td>1.000000 → 1.000000</td><td>0.900000 → 0.975000</td><td>0.924614 → 0.981546</td></tr>
+          <tr><th scope="row">Held-out / keyword (n=30)</th><td>0.900000 → 1.000000</td><td>0.822222 → 0.952778</td><td>0.840414 → 0.964356</td></tr>
+          <tr><th scope="row">Held-out / semantic (n=30)</th><td>0.833333 → 1.000000</td><td>0.690000 → 0.851111</td><td>0.723677 → 0.887862</td></tr>
+          <tr><th scope="row">Held-out / hybrid (n=30)</th><td>0.933333 → 1.000000</td><td>0.795556 → 0.933333</td><td>0.829924 → 0.950791</td></tr>
+        </tbody>
       </table></div>
-      <p>The release checks run 259 tests: 249 pass and ten skip. Ruff and type checks pass.
-      A real cached local Qwen model answers the fictional backup question and cites the correct source.
-      Final installed-wheel checks and public PyPI installation remain pending.</p>
-      <p>Local model memory exceeds a 2 GiB process budget. This work does not establish that the local stack fits that limit.
-      GPU process RSS excludes some device allocations. Build timings across different batch sizes do not isolate a chunking speed effect.</p>
+      <p>Held-out hybrid nDCG@10 rises from 0.829924 to 0.950791, an absolute increase of 0.120867.
+      Its 95% paired bootstrap interval is [0.016865, 0.241305].
+      Seven questions improve, 21 stay unchanged, and two decline. The predefined non-decline gate passes.</p>
+      <p>Intervals use 10,000 paired question resamples with seed 20261107.
+      The aggregate includes all 18 metric intervals, including development intervals that cross zero.
+      Small authored sets and incomplete relevance pools limit generalization.</p>
+      <h3>Retrieved evidence</h3>
+      <p>A correctly ranked source can still yield a passage without the needed answer. Literal quote checks expose that difference.</p>
+      <div class="table-scroll"><table id="evidence-availability">
+        <caption>Exact known-quote containment in retrieved text, before generation token-budget selection.</caption>
+        <thead><tr><th>Retrieved text</th><th>Development questions</th><th>Development quote hits</th><th>Held-out questions</th><th>Held-out quote hits</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Before: full retrieved text</th><td>14/20</td><td>30/42</td><td>13/30</td><td>44/75</td></tr>
+          <tr><th scope="row">Before: first 500 characters</th><td>1/20</td><td>1/42</td><td>5/30</td><td>20/75</td></tr>
+          <tr><th scope="row">0.1.0: full retrieved passages</th><td>15/20</td><td>33/42</td><td>23/30</td><td>67/75</td></tr>
+        </tbody>
+      </table></div>
+      <p>Question counts match whether checking any known quote or every known quote for that question.
+      Compared with full baseline retrieval, two development questions and one held-out question lose quote containment.
+      None declines against the first-500-character baseline.</p>
+      <p>These are evidence-availability checks, not answer accuracy.
+      They run before generation token-budget selection and do not establish which quotes reach the model or whether an answer is truthful.</p>
+      <h3>Query latency and process memory</h3>
+      <p>Latency and peak resident process memory come from one sequential pass per split and mode, including five absence controls.
+      Each development pass has 25 queries; each held-out pass has 35. These passes do not establish a controlled speed improvement.</p>
+      <div class="table-scroll"><table id="query-resources">
+        <caption>Before → 0.1.0. Latency is milliseconds; peak process RSS is GiB. RSS excludes some device allocations.</caption>
+        <thead><tr><th>Pass</th><th>Median latency</th><th>95th percentile latency</th><th>Peak process RSS</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Development / keyword (n=25)</th><td>183.3 → 9.4</td><td>458.7 → 27.6</td><td>0.978 → 1.962</td></tr>
+          <tr><th scope="row">Development / semantic (n=25)</th><td>467.2 → 104.4</td><td>1289.8 → 458.0</td><td>4.670 → 5.283</td></tr>
+          <tr><th scope="row">Development / hybrid (n=25)</th><td>337.3 → 251.7</td><td>727.4 → 550.4</td><td>4.604 → 5.260</td></tr>
+          <tr><th scope="row">Held-out / keyword (n=35)</th><td>5.8 → 10.8</td><td>7.8 → 20.9</td><td>1.457 → 1.960</td></tr>
+          <tr><th scope="row">Held-out / semantic (n=35)</th><td>327.9 → 203.7</td><td>616.6 → 728.4</td><td>4.972 → 5.380</td></tr>
+          <tr><th scope="row">Held-out / hybrid (n=35)</th><td>173.8 → 94.8</td><td>234.9 → 150.4</td><td>4.973 → 5.396</td></tr>
+        </tbody>
+      </table></div>
+      <p>Candidate retrieval errors are zero across all six passes.
+      Among answerable questions, candidate pools end below ten unique threads for one development query per mode and two held-out keyword queries.
+      One additional development absence control reaches the keyword pool limit.</p>
+      <h3>Index storage and build cost</h3>
+      <p>Stored rows increase from 2,353 to 138,085.
+      Entire index directories grow from 102,002,243 bytes (97.3 MiB) to 841,620,893 bytes (802.6 MiB).
+      Both measurements include version history and are not compacted sizes.</p>
+      <div class="table-scroll"><table id="build-resources">
+        <caption>Recorded build stages. These are not comparable cold builds.</caption>
+        <thead><tr><th>Stage</th><th>Seconds</th><th>Batch inputs</th><th>Peak process RSS, GiB</th><th>Peak MPS driver allocation, GiB</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Baseline build</th><td>498.499</td><td>2</td><td>4.561</td><td>Not recorded</td></tr>
+          <tr><th scope="row">Earlier passage build</th><td>10749.886</td><td>512</td><td>4.471</td><td>12.457</td></tr>
+          <tr><th scope="row">Comment-context update</th><td>5615.011</td><td>512</td><td>4.707</td><td>11.426</td></tr>
+        </tbody>
+      </table></div>
+      <p>The final index reuses 83,194 post passages and updates 1,296 comment sources after the earlier passage build.
+      A cold final build was not measured. Baseline and candidate batches differ: two versus 512 inputs.
+      No indexing speed comparison is claimed.</p>
+      <p>RSS is resident process memory, not total GPU memory. MPS driver allocations and RSS can overlap; do not add them as independent totals.
+      The local stack is not qualified for a 2 GiB homelab process budget.</p>
+      <details><summary>Hardware, model revision and runtime versions</summary>
+        <p>Measurements use an Apple M4 Max with 64 GiB physical memory, running macOS 27.2 on arm64.
+        The device is Mac MPS, with FP16 configured.
+        Encoder content capacity is 8,190 tokens after special-token allowance; passage text stays capped at 512 tokens.</p>
+        <p>Embedding model: <code>BAAI/bge-m3</code>.
+        Revision: <code>5617a9f61b028005a4858fdac845db406aefb181</code>. Python: <code>3.14.3</code>.</p>
+        <div class="table-scroll"><table>
+          <thead><tr><th>Package</th><th>Version</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">torch</th><td>2.15.0</td></tr>
+            <tr><th scope="row">FlagEmbedding</th><td>1.4.2</td></tr>
+            <tr><th scope="row">transformers</th><td>5.22.2</td></tr>
+            <tr><th scope="row">sentence-transformers</th><td>6.2.0</td></tr>
+            <tr><th scope="row">lancedb</th><td>0.41.0</td></tr>
+            <tr><th scope="row">tokenizers</th><td>0.23.3</td></tr>
+          </tbody>
+        </table></div>
+      </details>
     </section>
     <section id="synthesis" class="section">
       <h2>What ships</h2>
-      <p>Users get <code>rsi eval</code>, <code>rsi ui</code>, bounded evidence passages and explicit cloud fallback controls.</p>
+      <p><a href="https://pypi.org/project/reddit-stash-insights/0.1.0/">Reddit Stash Insights 0.1.0</a> includes <code>rsi eval</code>, <code>rsi ui</code>, bounded evidence passages and explicit cloud fallback controls.</p>
+      <p>A fresh public-registry installation outside the checkout passes 50 answerable fixture cases and ten absence controls with zero evaluation errors.
+      Torch is absent from that environment. The installed UI help and server health checks also pass.</p>
+      <pre><code>uvx --from &#x27;reddit-stash-insights[index]==0.1.0&#x27; rsi eval --fixture --split all</code></pre>
+      <p>The release checks run 265 tests: 255 pass and 10 optional or slow tests skip.
+      Ruff, type checks, ten Python compatibility jobs, package CI and Docker CI pass.
+      The actual PyPI package with cached local Qwen2.5 3B answers the fictional backup question and cites the correct source.
+      That smoke test uses no private index or hosted model.</p>
+      <p>The official wheel and source-archive hashes match the tested distributions.
+      Release tag <code>v0.1.0</code> points to <a href="https://github.com/rhnfzl/reddit-stash-insights/commit/fac69b74c921f8e58e8782163e14dad7c1458631">merge commit <code>fac69b74c921f8e58e8782163e14dad7c1458631</code></a>, whose tree matches <a href="https://github.com/rhnfzl/reddit-stash-insights/commit/46b204a">tested commit <code>46b204a</code></a>.</p>
+      <details><summary>Published artifact hashes and installed-suite checks</summary>
+        <p><a href="https://pypi.org/pypi/reddit-stash-insights/0.1.0/json">Official PyPI release metadata</a> records these SHA-256 digests:</p>
+        <ul>
+          <li><code>reddit_stash_insights-0.1.0-py3-none-any.whl</code>: <code>0ec69744d011f5313aa53fddd7683d6960ac6176bb59b34b56550f3ba913f8d0</code></li>
+          <li><code>reddit_stash_insights-0.1.0.tar.gz</code>: <code>40a408d095092f45d63a4425fc270dc9f5ee6c69a69105b139686ccfdda870ae</code></li>
+        </ul>
+        <p>Fresh installed-wheel suites run 173 core tests (six skips), 78 index tests (11 skips), and 112 service tests (one skip).</p>
+        <p><a href="https://github.com/rhnfzl/reddit-stash-insights/actions/runs/42433998944">The tag publication workflow</a> records the upload.</p>
+      </details>
       <p>The package includes a fictional demo, GitHub Discussions and a failed-search issue form.
       Graph and analytics promises are removed. Existing legacy indexes remain readable.</p>
-      <p>New writes require a compatible passage index. Use a fresh directory to keep the old index available.
-      An explicit rebuild discards the selected table, so keep the source archive and back up the old index first.</p>
-      <p><a href="https://github.com/rhnfzl/reddit-stash-insights">Source repository</a> ·
+      <p>Reindex comment archives to include previously omitted rendered context.
+      Use a fresh directory to keep the old index available. An explicit rebuild discards the selected table, so retain the source archive and index backup.</p>
+      <p><a href="https://github.com/rhnfzl/reddit-stash-insights/tree/v0.1.0">Versioned source</a> ·
       <a href="https://github.com/rhnfzl/reddit-stash-insights/discussions">Discussions</a> ·
-      <a href="https://pypi.org/project/reddit-stash-insights/">PyPI destination, publication pending</a></p>
+      <a href="https://github.com/rhnfzl/reddit-stash-insights/blob/main/docs/references/2026-11-08-rsi-0.1.0-aggregate.json">Sanitized aggregate record</a></p>
     </section>
     <section id="open" class="section">
       <h2>Limits and follow-up</h2>
-      <p>Fifty questions provide directional evidence. Broader pooled relevance review and human label review remain useful follow-up work.</p>
-      <p>Retrieval scores do not measure answer truthfulness or refusal quality. Those need a separate generation evaluation.</p>
-      <p>Smaller embedding models and rerankers remain optional experiments after the baseline is stable.
-      This release does not change the default model based on unrelated public leaderboards.</p>
-      <p>Private data stays local and outside the distributions. The case study reports aggregate results only.
-      No manual homelab deployment is part of this release.</p>
+      <p>The 50 answerable private questions target known regression paths. Their incomplete relevance labels received agent review, not human review.
+      Private inputs are excluded from distributions, so public users cannot independently reproduce these exact private results.</p>
+      <p>The public fixture reproduces scoring and installation behavior. It does not establish general search quality.
+      Retrieved quote containment does not measure answer truthfulness or refusal quality.</p>
+      <p>Collect failed searches from real users and broaden pooled relevance judgments with human review before changing models.
+      Default models remain unchanged; the embedding default is <code>BAAI/bge-m3</code>.</p>
+      <p>High build cost makes smaller-model and incremental-index experiments reasonable follow-up options.
+      Neither experiment is a promised feature or a measured improvement in this release.</p>
+      <p>Embedding and indexing benchmarks use local models. Selected private evidence was reviewed through a hosted assistant and hosted reviewers.
+      Raw private archives and questions are excluded from distributions and this public case.
+      The case reports aggregate counts and results only.</p>
+      <p>No manual homelab deployment was performed for this release. Existing image automation can roll out GHCR <code>latest</code> after merge.
+      That possible automatic rollout does not establish qualification for the 2 GiB target.</p>
     </section>
     <footer class="provenance" data-provenance="true">
-      <p>Prepared 2026-11-07 from source review, independent agent review and local measurements.
-      Publication and final paired metrics remain pending. No human label review is claimed.</p>
-      <script type="application/ld+json" id="provenance">{"@context":"https://schema.org","@type":"CreativeWork","@id":"urn:human-html:2026-11-07:research:rsi-release","dateCreated":"2026-11-07","creator":{"@type":"SoftwareApplication","name":"Codex","softwareVersion":"GPT-6"},"prompt":"Document the verified Reddit Stash Insights release, measured retrieval results and remaining limits.","reviewer":"pending","reviewState":"unreviewed","source":"Local source review and frozen archive evaluation"}</script>
+      <p>Created 2026-11-07; updated 2026-11-08 after publication, final paired measurements and independent agent review.
+      No human relevance-label review is claimed.</p>
+      <p><a href="https://github.com/rhnfzl/reddit-stash-insights/blob/main/docs/references/2026-11-08-rsi-0.1.0-aggregate.json">Sanitized aggregate source</a> · <a href="https://github.com/rhnfzl/reddit-stash-insights/blob/v0.1.0/docs/evaluation.md">Versioned evaluation guide</a> · <a href="https://pypi.org/project/reddit-stash-insights/0.1.0/">Published package</a></p>
+      <script type="application/ld+json" id="provenance">{"@context":"https://schema.org","@type":"CreativeWork","@id":"urn:human-html:2026-11-07:research:rsi-release","dateCreated":"2026-11-07","dateModified":"2026-11-08","creator":{"@type":"SoftwareApplication","name":"Codex","softwareVersion":"GPT-6"},"prompt":"Document the published Reddit Stash Insights release, measured retrieval results and limits.","reviewer":"Independent agent review; no human relevance-label review","reviewState":"agent-reviewed","source":"https://github.com/rhnfzl/reddit-stash-insights/blob/main/docs/references/2026-11-08-rsi-0.1.0-aggregate.json"}</script>
     </footer>
   </main>
 <div id="layout-audit" hidden role="status">⚠ This artifact overflows horizontally at this width - wrap wide tables / diagrams / <code>pre</code> blocks so they scroll, or they will clip on a phone.</div>

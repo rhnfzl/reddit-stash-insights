@@ -1,0 +1,635 @@
+{
+  "schema": 1,
+  "date": "2026-11-08",
+  "package": {
+    "name": "reddit-stash-insights",
+    "version": "0.1.0",
+    "tag": "v0.1.0",
+    "commit": "fac69b74c921f8e58e8782163e14dad7c1458631",
+    "python_sources_sha256": "cc4e487708d70a015c2e69e5ac8900da8631855072d09c3ddc24c9095e7e8470",
+    "pypi": {
+      "version": "0.1.0",
+      "official_api": "https://pypi.org/pypi/reddit-stash-insights/0.1.0/json",
+      "files": [
+        {
+          "filename": "reddit_stash_insights-0.1.0-py3-none-any.whl",
+          "sha256": "0ec69744d011f5313aa53fddd7683d6960ac6176bb59b34b56550f3ba913f8d0",
+          "url": "https://files.pythonhosted.org/packages/1c/a1/d431b0e5d454c51e71f4d1d34013215c2761baecc9753f662c9399a2697b/reddit_stash_insights-0.1.0-py3-none-any.whl"
+        },
+        {
+          "filename": "reddit_stash_insights-0.1.0.tar.gz",
+          "sha256": "40a408d095092f45d63a4425fc270dc9f5ee6c69a69105b139686ccfdda870ae",
+          "url": "https://files.pythonhosted.org/packages/64/9e/f886946436ef4881bb9e4c4ba6075483103bdc87606703be524f6d90f9ae/reddit_stash_insights-0.1.0.tar.gz"
+        }
+      ],
+      "digests_match_tested_distributions": true
+    },
+    "fresh_public_install": {
+      "package_version": "0.1.0",
+      "registry_install": true,
+      "torch_absent": true,
+      "fixture_answerable": 50,
+      "fixture_absent": 10,
+      "fixture_errors": 0,
+      "ui_help_pass": true
+    },
+    "readme_quickstart_verified": "uvx --from 'reddit-stash-insights[index]==0.1.0' rsi eval --fixture --split all"
+  },
+  "corpus": {
+    "markdown_files": 2815,
+    "parsed_items": 2353,
+    "source_groups": 1743,
+    "parse_errors": 0,
+    "private_raw_data_distributed": false,
+    "raw_snapshot_sha256": "69f874f4f206566a5bd4bf50263ae90d4afbabb15d752f9d02a178cf77bb76c6",
+    "questions_sha256": "3534ce451ec91c813d8ac7c4e79a8b984ffbae58f5211d1d7e7d8fa92beef263",
+    "qrels_sha256": "9a8a48beab4e2a18d32d9dfd40f3f02cb5ee5cd22f5a5805cf64cd0fcb096c7b"
+  },
+  "method": {
+    "baseline_commit": "78e00b8",
+    "question_origin": "Authored from source facts; not queries from independent users.",
+    "answerable_questions": {
+      "dev": 20,
+      "test": 30
+    },
+    "subject_scoped_absence_controls": {
+      "dev": 5,
+      "test": 5
+    },
+    "absence_split_deviation": "Five/five controls instead of planned four/six; frozen labels unchanged.",
+    "relevance_judgments": "Incomplete known-source labels; independent agent review, no human review.",
+    "heldout_runs": 1,
+    "settings_changed_after_heldout": false,
+    "chunk_tokens": 512,
+    "chunk_overlap": 64,
+    "model": "BAAI/bge-m3",
+    "model_revision": "5617a9f61b028005a4858fdac845db406aefb181",
+    "configured_fp16": true,
+    "device": "Mac MPS",
+    "bootstrap_method": "10000 paired question resamples; seed20261107; sorted sample positions250 and9750 (1-based)"
+  },
+  "runtime": {
+    "python": "3.14.3 (main, Mar  3 2026, 15:46:55) [Clang 21.1.4 ]",
+    "packages": {
+      "torch": "2.15.0",
+      "FlagEmbedding": "1.4.2",
+      "transformers": "5.22.2",
+      "sentence-transformers": "6.2.0",
+      "lancedb": "0.41.0",
+      "tokenizers": "0.23.3"
+    },
+    "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+    "architecture": "arm64",
+    "cpu": "Apple M4 Max",
+    "physical_memory_bytes": 68719476736
+  },
+  "paired_results": [
+    {
+      "split": "dev",
+      "mode": "keyword",
+      "n": 20,
+      "metrics": {
+        "mrr@10": {
+          "before": 0.8625,
+          "after": 1.0,
+          "delta": 0.13749999999999996,
+          "paired_bootstrap_95_percentile": [
+            0.0,
+            0.2875
+          ],
+          "improved": 3,
+          "unchanged": 17,
+          "declined": 0
+        },
+        "ndcg@10": {
+          "before": 0.8715338279036697,
+          "after": 1.0,
+          "delta": 0.12846617209633027,
+          "paired_bootstrap_95_percentile": [
+            0.0,
+            0.27846617209633034
+          ],
+          "improved": 3,
+          "unchanged": 17,
+          "declined": 0
+        },
+        "recall@10": {
+          "before": 0.9,
+          "after": 1.0,
+          "delta": 0.09999999999999998,
+          "paired_bootstrap_95_percentile": [
+            0.0,
+            0.25
+          ],
+          "improved": 2,
+          "unchanged": 18,
+          "declined": 0
+        }
+      },
+      "latency_p50_ms": [
+        183.27829102054238,
+        9.380624978803098
+      ],
+      "latency_p95_ms": [
+        458.69866700377315,
+        27.571332990191877
+      ],
+      "peak_rss_bytes": [
+        1050443776,
+        2106998784
+      ]
+    },
+    {
+      "split": "dev",
+      "mode": "semantic",
+      "n": 20,
+      "metrics": {
+        "mrr@10": {
+          "before": 0.8625,
+          "after": 0.9266666666666667,
+          "delta": 0.0641666666666667,
+          "paired_bootstrap_95_percentile": [
+            -0.028333333333333332,
+            0.175
+          ],
+          "improved": 3,
+          "unchanged": 15,
+          "declined": 2
+        },
+        "ndcg@10": {
+          "before": 0.897719778617961,
+          "after": 0.944342640361727,
+          "delta": 0.04662286174376595,
+          "paired_bootstrap_95_percentile": [
+            -0.02470451730768311,
+            0.1307463934783692
+          ],
+          "improved": 3,
+          "unchanged": 15,
+          "declined": 2
+        },
+        "recall@10": {
+          "before": 1.0,
+          "after": 1.0,
+          "delta": 0.0,
+          "paired_bootstrap_95_percentile": [
+            0.0,
+            0.0
+          ],
+          "improved": 0,
+          "unchanged": 20,
+          "declined": 0
+        }
+      },
+      "latency_p50_ms": [
+        467.2407080652192,
+        104.41224998794496
+      ],
+      "latency_p95_ms": [
+        1289.7624999750406,
+        457.97416695859283
+      ],
+      "peak_rss_bytes": [
+        5014290432,
+        5672566784
+      ]
+    },
+    {
+      "split": "dev",
+      "mode": "hybrid",
+      "n": 20,
+      "metrics": {
+        "mrr@10": {
+          "before": 0.9,
+          "after": 0.975,
+          "delta": 0.07499999999999996,
+          "paired_bootstrap_95_percentile": [
+            -0.0375,
+            0.2
+          ],
+          "improved": 3,
+          "unchanged": 16,
+          "declined": 1
+        },
+        "ndcg@10": {
+          "before": 0.9246141434859123,
+          "after": 0.9815464876785729,
+          "delta": 0.05693234419266058,
+          "paired_bootstrap_95_percentile": [
+            -0.02689436486795104,
+            0.15077171302817563
+          ],
+          "improved": 3,
+          "unchanged": 16,
+          "declined": 1
+        },
+        "recall@10": {
+          "before": 1.0,
+          "after": 1.0,
+          "delta": 0.0,
+          "paired_bootstrap_95_percentile": [
+            0.0,
+            0.0
+          ],
+          "improved": 0,
+          "unchanged": 20,
+          "declined": 0
+        }
+      },
+      "latency_p50_ms": [
+        337.2526670573279,
+        251.65879202540964
+      ],
+      "latency_p95_ms": [
+        727.395125082694,
+        550.3615828929469
+      ],
+      "peak_rss_bytes": [
+        4943003648,
+        5648203776
+      ]
+    },
+    {
+      "split": "test",
+      "mode": "keyword",
+      "n": 30,
+      "metrics": {
+        "mrr@10": {
+          "before": 0.8222222222222223,
+          "after": 0.9527777777777777,
+          "delta": 0.13055555555555542,
+          "paired_bootstrap_95_percentile": [
+            0.03333333333333333,
+            0.25833333333333336
+          ],
+          "improved": 5,
+          "unchanged": 25,
+          "declined": 0
+        },
+        "ndcg@10": {
+          "before": 0.8404138124738681,
+          "after": 0.9643558852691131,
+          "delta": 0.12394207279524494,
+          "paired_bootstrap_95_percentile": [
+            0.026424385160757326,
+            0.24540183322497755
+          ],
+          "improved": 5,
+          "unchanged": 25,
+          "declined": 0
+        },
+        "recall@10": {
+          "before": 0.9,
+          "after": 1.0,
+          "delta": 0.09999999999999998,
+          "paired_bootstrap_95_percentile": [
+            0.0,
+            0.23333333333333334
+          ],
+          "improved": 3,
+          "unchanged": 27,
+          "declined": 0
+        }
+      },
+      "latency_p50_ms": [
+        5.84200001321733,
+        10.823291959241033
+      ],
+      "latency_p95_ms": [
+        7.791792042553425,
+        20.936917047947645
+      ],
+      "peak_rss_bytes": [
+        1564147712,
+        2104770560
+      ]
+    },
+    {
+      "split": "test",
+      "mode": "semantic",
+      "n": 30,
+      "metrics": {
+        "mrr@10": {
+          "before": 0.69,
+          "after": 0.8511111111111112,
+          "delta": 0.1611111111111112,
+          "paired_bootstrap_95_percentile": [
+            0.013888888888888888,
+            0.31722222222222224
+          ],
+          "improved": 11,
+          "unchanged": 16,
+          "declined": 3
+        },
+        "ndcg@10": {
+          "before": 0.7236772875340769,
+          "after": 0.8878616418352312,
+          "delta": 0.1641843543011543,
+          "paired_bootstrap_95_percentile": [
+            0.032047027401281285,
+            0.30829988159407984
+          ],
+          "improved": 11,
+          "unchanged": 16,
+          "declined": 3
+        },
+        "recall@10": {
+          "before": 0.8333333333333334,
+          "after": 1.0,
+          "delta": 0.16666666666666663,
+          "paired_bootstrap_95_percentile": [
+            0.03333333333333333,
+            0.3
+          ],
+          "improved": 5,
+          "unchanged": 25,
+          "declined": 0
+        }
+      },
+      "latency_p50_ms": [
+        327.897832961753,
+        203.6894999910146
+      ],
+      "latency_p95_ms": [
+        616.5987920248881,
+        728.3950001001358
+      ],
+      "peak_rss_bytes": [
+        5338611712,
+        5777080320
+      ]
+    },
+    {
+      "split": "test",
+      "mode": "hybrid",
+      "n": 30,
+      "metrics": {
+        "mrr@10": {
+          "before": 0.7955555555555556,
+          "after": 0.9333333333333333,
+          "delta": 0.13777777777777778,
+          "paired_bootstrap_95_percentile": [
+            0.016666666666666666,
+            0.2722222222222222
+          ],
+          "improved": 7,
+          "unchanged": 21,
+          "declined": 2
+        },
+        "ndcg@10": {
+          "before": 0.8299236254066618,
+          "after": 0.9507906338095277,
+          "delta": 0.1208670084028659,
+          "paired_bootstrap_95_percentile": [
+            0.016864548449327686,
+            0.2413052481617146
+          ],
+          "improved": 7,
+          "unchanged": 21,
+          "declined": 2
+        },
+        "recall@10": {
+          "before": 0.9333333333333333,
+          "after": 1.0,
+          "delta": 0.06666666666666665,
+          "paired_bootstrap_95_percentile": [
+            0.0,
+            0.16666666666666666
+          ],
+          "improved": 2,
+          "unchanged": 28,
+          "declined": 0
+        }
+      },
+      "latency_p50_ms": [
+        173.8249589689076,
+        94.75566702894866
+      ],
+      "latency_p95_ms": [
+        234.93691708426923,
+        150.40208399295807
+      ],
+      "peak_rss_bytes": [
+        5340217344,
+        5794316288
+      ]
+    }
+  ],
+  "retrieved_evidence_availability": {
+    "dev": {
+      "questions": 20,
+      "known_quotes": 42,
+      "summary": {
+        "baseline_full_passages": {
+          "questions_with_any_quote": 14,
+          "questions_with_all_quotes": 14,
+          "known_quote_hits": 30
+        },
+        "baseline_first_500_characters": {
+          "questions_with_any_quote": 1,
+          "questions_with_all_quotes": 1,
+          "known_quote_hits": 1
+        },
+        "candidate_full_passages": {
+          "questions_with_any_quote": 15,
+          "questions_with_all_quotes": 15,
+          "known_quote_hits": 33
+        }
+      },
+      "regressions_vs_full_baseline": 2,
+      "regressions_vs_500_character_cap": 0,
+      "mode": "hybrid",
+      "unique_threads": 10,
+      "scope": "Exact quote containment in the best retrieved passage from each unique source group, before generation token-budget selection."
+    },
+    "test": {
+      "questions": 30,
+      "known_quotes": 75,
+      "summary": {
+        "baseline_full_passages": {
+          "questions_with_any_quote": 13,
+          "questions_with_all_quotes": 13,
+          "known_quote_hits": 44
+        },
+        "baseline_first_500_characters": {
+          "questions_with_any_quote": 5,
+          "questions_with_all_quotes": 5,
+          "known_quote_hits": 20
+        },
+        "candidate_full_passages": {
+          "questions_with_any_quote": 23,
+          "questions_with_all_quotes": 23,
+          "known_quote_hits": 67
+        }
+      },
+      "regressions_vs_full_baseline": 1,
+      "regressions_vs_500_character_cap": 0,
+      "mode": "hybrid",
+      "unique_threads": 10,
+      "scope": "Exact quote containment in the best retrieved passage from each unique source group, before generation token-budget selection."
+    }
+  },
+  "candidate_coverage": {
+    "dev": {
+      "keyword": {
+        "errors": 0,
+        "answerable": 20,
+        "subject_scoped_absent": 5,
+        "candidate_pool_exhausted_below10": 2,
+        "latency_query_count": 25,
+        "answerable_candidate_pool_exhausted_below10": 1,
+        "pool_count_scope": "All selected queries, including subject-scoped absence controls; answerable count is separate."
+      },
+      "semantic": {
+        "errors": 0,
+        "answerable": 20,
+        "subject_scoped_absent": 5,
+        "candidate_pool_exhausted_below10": 1,
+        "latency_query_count": 25,
+        "answerable_candidate_pool_exhausted_below10": 1,
+        "pool_count_scope": "All selected queries, including subject-scoped absence controls; answerable count is separate."
+      },
+      "hybrid": {
+        "errors": 0,
+        "answerable": 20,
+        "subject_scoped_absent": 5,
+        "candidate_pool_exhausted_below10": 1,
+        "latency_query_count": 25,
+        "answerable_candidate_pool_exhausted_below10": 1,
+        "pool_count_scope": "All selected queries, including subject-scoped absence controls; answerable count is separate."
+      }
+    },
+    "test": {
+      "keyword": {
+        "errors": 0,
+        "answerable": 30,
+        "subject_scoped_absent": 5,
+        "candidate_pool_exhausted_below10": 2,
+        "latency_query_count": 35,
+        "answerable_candidate_pool_exhausted_below10": 2,
+        "pool_count_scope": "All selected queries, including subject-scoped absence controls; answerable count is separate."
+      },
+      "semantic": {
+        "errors": 0,
+        "answerable": 30,
+        "subject_scoped_absent": 5,
+        "candidate_pool_exhausted_below10": 0,
+        "latency_query_count": 35,
+        "answerable_candidate_pool_exhausted_below10": 0,
+        "pool_count_scope": "All selected queries, including subject-scoped absence controls; answerable count is separate."
+      },
+      "hybrid": {
+        "errors": 0,
+        "answerable": 30,
+        "subject_scoped_absent": 5,
+        "candidate_pool_exhausted_below10": 0,
+        "latency_query_count": 35,
+        "answerable_candidate_pool_exhausted_below10": 0,
+        "pool_count_scope": "All selected queries, including subject-scoped absence controls; answerable count is separate."
+      }
+    }
+  },
+  "parser_retention": {
+    "known_quotes": 117,
+    "before": 110,
+    "after": 117,
+    "delta": 7,
+    "scope": "Exact quote retention within individual parsed items; extraction diagnostic, not retrieval quality."
+  },
+  "index": {
+    "baseline_rows": 2353,
+    "candidate_rows": 138085,
+    "candidate_max_tokens": 512,
+    "complete": true,
+    "full_payload_verified": true,
+    "storage": {
+      "baseline": {
+        "bytes": 102002243,
+        "files": 3539,
+        "scope": "entire local index directory, including version history; not compacted"
+      },
+      "candidate": {
+        "bytes": 841620893,
+        "files": 8241,
+        "scope": "entire local index directory, including version history; not compacted"
+      }
+    },
+    "embedding_input_token_capacity": 8190
+  },
+  "builds": {
+    "baseline": {
+      "build_seconds": 498.4988989579724,
+      "batch_items": 2,
+      "peak_rss_bytes": 4897652736
+    },
+    "earlier_candidate": {
+      "build_seconds": 10749.886294875061,
+      "batch_items": 512,
+      "peak_rss_bytes": 4800937984,
+      "peak_mps_driver_bytes": 13375340544
+    },
+    "comment_context_update": {
+      "build_seconds": 5615.011158792069,
+      "batch_items": 512,
+      "peak_rss_bytes": 5054316544,
+      "peak_mps_driver_bytes": 12269109248,
+      "post_passages_reused": 83194,
+      "updated_comment_sources": 1296,
+      "cold_build": false
+    },
+    "timing_limit": "Final index used an earlier build plus an isolated comment update. A cold final build was not measured. Batch sizes differ. No indexing speed comparison is claimed."
+  },
+  "release_gate": {
+    "heldout_hybrid_ndcg_not_declining": true,
+    "independent_review": "PASS"
+  },
+  "limitations": [
+    "Private inputs are not distributed, so public users cannot independently reproduce these exact private results.",
+    "The public fixture reproduces scoring and installation behavior, not general search quality.",
+    "Exact retrieved quote containment runs before generation token-budget selection and does not establish answer truthfulness.",
+    "Single sequential query passes do not establish a controlled speed improvement.",
+    "Process peak RSS excludes some device memory; do not add RSS and driver allocations as independent totals.",
+    "Local model stack not qualified for a2GiB process budget.",
+    "Selected private evidence was reviewed in the hosted assistant session; embedding and indexing benchmarks used local models."
+  ],
+  "validation": {
+    "project_unittest": {
+      "tests": 265,
+      "passed": 255,
+      "skipped": 10,
+      "skip_scope": "optional and slow tests"
+    },
+    "ruff": "PASS",
+    "mypy": "PASS",
+    "python_ci_jobs": 10,
+    "python_ci": "PASS",
+    "package_ci": "PASS",
+    "docker_ci": "PASS",
+    "tag_publish_workflow": "https://github.com/rhnfzl/reddit-stash-insights/actions/runs/42433998944",
+    "fresh_installed_suites": {
+      "core": {
+        "tests": 173,
+        "skipped": 6
+      },
+      "index": {
+        "tests": 78,
+        "skipped": 11
+      },
+      "services": {
+        "tests": 112,
+        "skipped": 1
+      }
+    },
+    "installed_ui_health": "ok",
+    "actual_public_local_chat": {
+      "package": "PyPI0.1.0",
+      "provider": "local llama-cpp",
+      "model": "cachedQwen2.5-3B-InstructQ4_K_M",
+      "data": "fictionalCedarbackupfixture",
+      "retrieval": "keyword",
+      "correct_time_in_answer": true,
+      "citation1_present": true,
+      "private_index_used": false
+    }
+  }
+}
