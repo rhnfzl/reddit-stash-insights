@@ -43,7 +43,7 @@ jobs:
 
       - name: Run core tests
         run: |
-          python -m unittest tests.test_models tests.test_parser tests.test_scanner tests.test_cli tests.test_config tests.test_s3_fetch -v
+          python -m unittest tests.test_models tests.test_parser tests.test_scanner tests.test_chunker tests.test_cli tests.test_config tests.test_s3_fetch tests.test_evaluation tests.test_cli_eval tests.test_cli_ui -v
 
       - name: Run chat tests
         run: |
@@ -72,7 +72,7 @@ jobs:
 
       - name: Run search tests
         run: |
-          python -m unittest tests.test_embedder tests.test_vector_store tests.test_search tests.test_cli_search -v
+          python -m unittest tests.test_embedder tests.test_vector_store tests.test_search tests.test_chunker tests.test_index_build tests.test_cli_search -v
 
   service-tests:
     name: Service (py${{ matrix.python-version }})
@@ -93,8 +93,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install service dependencies (no torch)
-        run: uv pip install --system -e ".[dev,index,embed-openai,mcp,chat-openai]"
+        run: uv pip install --system -e ".[dev,index,embed-openai,mcp,chat-openai,ui]"
 
       - name: Run service tests
         run: |
-          RSI_SKIP_SLOW_TESTS=1 python -m unittest tests.test_openai_embedder tests.test_index_build tests.test_deploy_contract tests.test_mcp_http tests.test_vector_store tests.test_cli_search tests.test_cli_chat -v
+          RSI_SKIP_SLOW_TESTS=1 python -m unittest tests.test_chunker tests.test_openai_embedder tests.test_index_build tests.test_deploy_contract tests.test_mcp_http tests.test_vector_store tests.test_cli_search tests.test_cli_chat tests.test_cli_eval tests.test_cli_ui tests.test_ui_chat_sources -v

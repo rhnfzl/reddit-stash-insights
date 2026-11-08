@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from rsi.indexer.chunker import ALGORITHM_VERSION
+
 META_FILE = "rsi_index.json"
-SCHEMA = 1
+SCHEMA = 2
 # Indexes built before metadata existed were always local BGE-M3.
 LEGACY_IDENTITY = ("local", "BAAI/bge-m3")
 
@@ -35,6 +37,7 @@ def read_meta(db_path: Path) -> Optional[Dict[str, Any]]:
 
 def write_meta(
     db_path: Path, *, provider: str, model: str, dim: int, rows: int, parse_errors: int, complete: bool = True,
+    chunk_tokens: int = 512, chunk_overlap: int = 64, input_token_capacity: Optional[int] = None,
 ) -> None:
     """Write metadata atomically.
 
@@ -43,6 +46,7 @@ def write_meta(
     """
     data = {
         "schema": SCHEMA,
+        "chunks": {"version": ALGORITHM_VERSION, "max_tokens": chunk_tokens, "overlap": chunk_overlap},
         "complete": complete,
         "provider": provider,
         "model": model,
@@ -51,6 +55,8 @@ def write_meta(
         "parse_errors": parse_errors,
         "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+    if input_token_capacity is not None:
+        data["input_token_capacity"] = input_token_capacity
     path = meta_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -64,6 +70,7 @@ def remove_meta(db_path: Path) -> None:
 
 def check_compatible(
     db_path: Path, has_table: bool, provider: str, model: str, *, allow_incomplete: bool = False,
+    chunk_tokens: int = 512, chunk_overlap: int = 64, writing: bool = False,
 ) -> None:
     """Raise IndexConfigMismatch if an existing index was built by another embedder.
 
@@ -73,6 +80,13 @@ def check_compatible(
     still running) raises IndexIncomplete unless ``allow_incomplete`` (the indexer resuming it).
     """
     meta = read_meta(db_path)
+    if meta is not None and meta.get("schema") not in (1, SCHEMA):
+        raise IndexConfigMismatch(f"unsupported index schema at {db_path}: use a fresh directory or --rebuild")
+    if writing and has_table and (meta is None or meta.get("schema") != SCHEMA):
+        raise IndexConfigMismatch(f"legacy index at {db_path} is read-only: use a fresh directory or --rebuild")
+    expected = {"version": ALGORITHM_VERSION, "max_tokens": chunk_tokens, "overlap": chunk_overlap}
+    if meta is not None and meta.get("schema") == SCHEMA and meta.get("chunks") != expected:
+        raise IndexConfigMismatch(f"index chunk settings differ at {db_path}: use a fresh directory or --rebuild")
     if meta is not None and meta.get("complete") is False and not allow_incomplete:
         raise IndexIncomplete(
             f"index at {db_path} is an unfinished build: run 'rsi index <reddit_dir> --db-path {db_path}' again"

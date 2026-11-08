@@ -14,7 +14,7 @@ from rsi import __version__
 
 app = typer.Typer(
     name="rsi",
-    help="Semantic search, knowledge graph, and AI chat for reddit-stash archives.",
+    help="Semantic search and AI chat for reddit-stash archives.",
     no_args_is_help=True,
 )
 
@@ -29,7 +29,7 @@ def version_callback(value: bool):
 def main(
     version: Optional[bool] = typer.Option(None, "--version", callback=version_callback, is_eager=True),
 ):
-    """reddit-stash-insights: search, graph, analytics, and chat for your Reddit archive."""
+    """Search and chat with your Reddit archive."""
     pass
 
 
@@ -97,53 +97,34 @@ def index(
 
     try:
         # allow_incomplete: re-running over a crashed build resumes it (rows are upserted).
-        engine = SearchEngine(db_path=db_path, settings=settings, verify=not rebuild, allow_incomplete=True)
+        engine = SearchEngine(db_path=db_path, settings=settings, verify=not rebuild, allow_incomplete=True, writing=True)
     except IndexConfigMismatch as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(EXIT_MISMATCH)
-    if rebuild:
-        remove_meta(db_path)
-        engine.store.drop()
-
-    texts = []
-    ids = []
-    metadata = []
-
-    for post in scan_result.posts:
-        texts.append(post.search_text()[:settings.max_text_chars])
-        ids.append(post.id)
-        metadata.append({
-            "subreddit": post.subreddit,
-            "score": post.score,
-            "timestamp": str(post.timestamp or ""),
-            "file_path": post.file_path,
-            "content_type": "post",
-            "source": post.source,
-        })
-
-    for comment in scan_result.comments:
-        texts.append(comment.search_text()[:settings.max_text_chars])
-        ids.append(comment.id)
-        metadata.append({
-            "subreddit": comment.subreddit,
-            "score": comment.score,
-            "timestamp": str(comment.timestamp or ""),
-            "file_path": comment.file_path,
-            "content_type": "comment",
-            "source": comment.source,
-        })
-
-    del scan_result  # the parsed bodies are no longer needed; free them before embedding
+    from itertools import chain
 
     provider, model = engine.embedder_identity()
     if provider == "local":
         typer.echo("Loading embedding model (first run downloads ~2GB)...")
-    typer.echo(f"Embedding {len(texts)} items with {provider}/{model}...")
-    # Mark the build unfinished before the first row, so readers refuse it until the final write_meta.
-    write_meta(db_path, provider=provider, model=model, dim=0, rows=0, parse_errors=n_errors, complete=False)
-    dim = engine.index_texts(texts=texts, ids=ids, metadata=metadata)
-    write_meta(db_path, provider=provider, model=model, dim=dim, rows=engine.store.count(), parse_errors=n_errors)
-    typer.echo(f"Indexed {len(texts)} items to {db_path}")
+    try:
+        input_token_capacity = engine.validate_index_settings()
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2)
+    if rebuild:
+        remove_meta(db_path)
+        engine.store.drop()
+
+    typer.echo(f"Embedding passages from {n_items} items with {provider}/{model}...")
+    # Readers must refuse partial rows until embedding and the full-text index both finish.
+    write_meta(db_path, provider=provider, model=model, dim=0, rows=0, parse_errors=n_errors,
+               complete=False, chunk_tokens=settings.chunk_tokens, chunk_overlap=settings.chunk_overlap,
+               input_token_capacity=input_token_capacity)
+    dim = engine.index_items(chain(scan_result.posts, scan_result.comments))
+    write_meta(db_path, provider=provider, model=model, dim=dim, rows=engine.store.count(), parse_errors=n_errors,
+               chunk_tokens=settings.chunk_tokens, chunk_overlap=settings.chunk_overlap,
+               input_token_capacity=input_token_capacity)
+    typer.echo(f"Indexed {n_items} items as {engine.store.count()} passages to {db_path}")
 
 
 @app.command()
@@ -257,18 +238,22 @@ def _build_chat_engine(
 ) -> DirectEngine:
     """Construct a :class:`DirectEngine` from CLI / config parameters."""
     from rsi.chat.engine import DirectEngine
-    from rsi.chat.providers.availability import find_available_provider
+    from rsi.chat.providers.availability import find_available_provider, provider_destination
     from rsi.chat.providers.base import create_provider
     from rsi.config import Settings
     from rsi.indexer.search import SearchEngine, SearchMode
 
-    resolved_provider, resolved_model, note = find_available_provider(provider, model)
+    settings = Settings.load()
+    resolved_provider, resolved_model, note = find_available_provider(
+        provider, model, allow_cloud_fallback=settings.allow_cloud_fallback,
+    )
     if resolved_provider is None:
         raise RuntimeError(f"No LLM provider available: {note}")
     assert resolved_model is not None  # guaranteed when provider is not None
     if note:
         typer.echo(note)
-    search_engine = SearchEngine(db_path=db_path, settings=Settings.load())
+    typer.echo(f"Chat context destination: {provider_destination(resolved_provider)} (model {resolved_model})")
+    search_engine = SearchEngine(db_path=db_path, settings=settings)
     llm = create_provider(provider=resolved_provider, model=resolved_model)
     return DirectEngine(
         search_engine=search_engine,
@@ -280,15 +265,16 @@ def _build_chat_engine(
 
 def _print_sources(sources: list[dict]) -> None:
     """Pretty-print source documents."""
+    from rsi.chat.prompt import source_reference
+
     if not sources:
         typer.echo("  No sources available.")
         return
     typer.echo()
     for i, src in enumerate(sources, 1):
         sub = src.get("subreddit", "?")
-        fpath = src.get("file_path", "?")
         preview = src.get("text", "")[:100].replace("\n", " ")
-        typer.echo(f"  [{i}] r/{sub} -- {fpath}")
+        typer.echo(f"  [{i}] r/{sub} -- {source_reference(src)}")
         typer.echo(f"      {preview}")
 
 
@@ -433,3 +419,124 @@ def mcp(
     else:
         typer.echo(f"Transport '{transport}' not supported. Use 'stdio' or 'http'.")
         raise typer.Exit(1)
+
+
+@app.command("eval")
+def evaluate_search(
+    dataset: Optional[Path] = typer.Option(None, "--dataset", help="Questions JSONL; snapshot.json must be alongside"),
+    qrels: Optional[Path] = typer.Option(None, "--qrels", help="Canonical source-thread relevance labels JSONL"),
+    corpus: Optional[Path] = typer.Option(None, "--corpus", help="Frozen Markdown corpus to verify against snapshot.json"),
+    db_path: Optional[Path] = typer.Option(None, "--db-path", help="Explicit evaluation index; never defaults to live index"),
+    mode: str = typer.Option("keyword", "--mode", help="keyword, semantic or hybrid"),
+    split: str = typer.Option("dev", "--split", help="dev, test or all"),
+    output: Path = typer.Option(Path("evaluation.json"), "--output", help="JSON report destination"),
+    fixture: bool = typer.Option(False, "--fixture", help="Build a temporary FTS index of the packaged synthetic corpus"),
+    allow_remote: bool = typer.Option(False, "--allow-remote", help="Allow the configured hosted embedding destination"),
+) -> None:
+    """Measure search against frozen labels without calling a chat model."""
+    import hashlib
+    import json
+    import os
+    import tempfile
+    from urllib.parse import urlsplit, urlunsplit
+
+    from rsi.config import Settings
+    from rsi.evaluation import evaluate, export_fixture, index_fingerprint, load_dataset
+    from rsi.indexer.index_meta import read_meta
+
+    if mode not in ("keyword", "semantic", "hybrid") or split not in ("dev", "test", "all"):
+        raise typer.BadParameter("mode must be keyword/semantic/hybrid and split must be dev/test/all")
+    if fixture and (mode != "keyword" or any(value is not None for value in (dataset, qrels, corpus, db_path))):
+        raise typer.BadParameter("--fixture requires keyword mode and owns its temporary corpus and index")
+    if not fixture and any(value is None for value in (dataset, qrels, corpus, db_path)):
+        raise typer.BadParameter("provide --dataset, --qrels, --corpus and --db-path, or use --fixture")
+    settings = Settings.load()
+    if mode != "keyword" and settings.embedding_provider != "local":
+        destination = settings.embedding_base_url or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+        parts = urlsplit(destination)
+        destination = urlunsplit((parts.scheme, parts.netloc.rsplit("@", 1)[-1], parts.path, "", ""))
+        if not allow_remote:
+            raise typer.BadParameter(f"hosted embeddings require --allow-remote; destination: {destination}")
+        typer.echo(f"Embedding destination: {destination}. Evaluation query text will be sent there.", err=True)
+    try:
+        with tempfile.TemporaryDirectory(prefix="rsi-eval-") as tmp:
+            if fixture:
+                from rsi.core.scanner import scan_directory
+                from rsi.indexer.vector_store import VectorStore
+
+                fixture_root = Path(tmp) / "fixture"
+                export_fixture(fixture_root)
+                dataset, qrels, corpus = (fixture_root / "questions.jsonl", fixture_root / "qrels.jsonl",
+                                           fixture_root / "corpus")
+                db_path = Path(tmp) / "index"
+                queries, labels, snapshot = load_dataset(dataset, qrels, corpus)
+                scan_result = scan_directory(corpus)
+                store = VectorStore(db_path)
+                records: list[dict] = []
+                for kind, items in (("post", scan_result.posts), ("comment", scan_result.comments)):
+                    records.extend({"id": item.id, "content_type": kind, "text": item.search_text(),
+                                    "subreddit": item.subreddit, "permalink": item.permalink,
+                                    "file_path": str(item.file_path)} for item in items)
+                store.add_records(records)
+                store.create_fts_index()
+                def search(query, limit, mode, subreddit):
+                    return store.fts_search(query, limit, subreddit)
+                index_identity = {"schema": "FTS-only synthetic fixture", "rows": store.count(),
+                                  **index_fingerprint(store, snapshot)}
+            else:
+                from rsi.indexer.search import SearchEngine, SearchMode
+
+                assert dataset is not None and qrels is not None and corpus is not None and db_path is not None
+                queries, labels, snapshot = load_dataset(dataset, qrels, corpus)
+                if not db_path.exists():
+                    raise ValueError(f"evaluation index does not exist: {db_path}")
+                metadata = read_meta(db_path)
+                if metadata is not None and not isinstance(metadata, dict):
+                    raise ValueError("evaluation index metadata must be a JSON object")
+                engine = SearchEngine(db_path=db_path, settings=settings)
+                def search(query, limit, mode, subreddit):
+                    return engine.search_candidates(query, limit=limit, mode=SearchMode(mode), subreddit=subreddit)
+                index_identity = {**(metadata or {"schema": "legacy", "rows": engine.store.count()}),
+                                  **index_fingerprint(engine.store, snapshot)}
+            identity = {"embedding": "none (keyword)" if mode == "keyword" else {
+                "provider": settings.embedding_provider, "model": settings.embedding_model,
+            }, "index": index_identity, "config": {"mode": mode, "split": split, "cutoff": 10,
+                  "candidate_depths": [50, 100, 200], "thread_order": "first occurrence",
+                  "allow_remote": allow_remote, "chunk_tokens": settings.chunk_tokens,
+                  "chunk_overlap": settings.chunk_overlap,
+                  "index_chunk_size": settings.index_chunk_size, "embedding_use_fp16": settings.embedding_use_fp16},
+                "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+                "qrels_sha256": hashlib.sha256(qrels.read_bytes()).hexdigest()}
+            report = evaluate(queries, labels, snapshot, search, mode=mode, split=split, identity=identity)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    except (ValueError, OSError, RuntimeError, ImportError) as error:
+        typer.echo(f"Evaluation failed: {error}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"{report['answerable_count']} answerable, {report['absent_count']} absent, "
+               f"{report['error_count']} errors. Report: {output}")
+    if report["error_count"]:
+        raise typer.Exit(1)
+
+
+@app.command()
+def ui(
+    port: int = typer.Option(8501, "--port", min=1, max=65535, help="Local web interface port"),
+) -> None:
+    """Open the installed web interface on this computer."""
+    import importlib.util
+    import subprocess
+    import sys
+
+    if importlib.util.find_spec("streamlit") is None:
+        typer.echo("Install UI support with pip install 'reddit-stash-insights[ui]'", err=True)
+        raise typer.Exit(1)
+    script = Path(__file__).parent / "ui" / "chat.py"
+    try:
+        result = subprocess.run([
+            sys.executable, "-m", "streamlit", "run", str(script),
+            "--server.address", "127.0.0.1", "--server.port", str(port),
+        ])
+    except KeyboardInterrupt:
+        raise typer.Exit(130)
+    raise typer.Exit(result.returncode)

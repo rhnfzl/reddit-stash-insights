@@ -1,0 +1,48 @@
+name: Search that failed
+description: Report a query that did not find the expected archived evidence.
+title: "Search failed: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share sanitised examples only. Do not upload your private archive, credentials, usernames, or personal file paths.
+  - type: input
+    id: version
+    attributes:
+      label: RSI version
+      description: Copy the output of rsi --version.
+    validations:
+      required: true
+  - type: input
+    id: mode
+    attributes:
+      label: Search mode and embedding model
+      placeholder: hybrid, BAAI/bge-m3
+    validations:
+      required: true
+  - type: textarea
+    id: query
+    attributes:
+      label: Sanitised search query
+      description: Replace identifying details. An original synthetic example is welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: Describe the evidence that should appear and why it answers the query.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Returned results
+      description: Include sanitised result IDs, error output, or a synthetic reproducer.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and index
+      description: OS, Python version, archive size, and whether the index was rebuilt after upgrading.

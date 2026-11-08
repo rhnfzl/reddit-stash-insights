@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import Iterator
 
-from rsi.chat.providers.base import ChatMessage
+from rsi.chat.providers.base import ChatMessage, estimate_tokens
 
 
 class OpenAIProvider:
@@ -19,6 +19,8 @@ class OpenAIProvider:
         max_tokens: int = 512,
         context_window: int = 8192,
     ):
+        if not 0 < max_tokens < context_window:
+            raise ValueError("max_tokens must be positive and smaller than context_window")
         from openai import OpenAI
 
         self._client = OpenAI(
@@ -58,3 +60,10 @@ class OpenAIProvider:
     def context_window(self) -> int:
         """Maximum token context length supported by the loaded model."""
         return self._context_window
+
+    @property
+    def max_output_tokens(self) -> int:
+        return self._max_tokens
+
+    def count_tokens(self, messages: list[ChatMessage]) -> int:
+        return estimate_tokens(messages)

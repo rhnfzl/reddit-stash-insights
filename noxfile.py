@@ -17,18 +17,25 @@ CORE_TESTS = [
     "tests.test_models",
     "tests.test_parser",
     "tests.test_scanner",
+    "tests.test_chunker",
     "tests.test_cli",
     "tests.test_config",
     "tests.test_s3_fetch",
     "tests.test_chat_providers",
     "tests.test_chat_engine",
     "tests.test_cli_chat",
+    "tests.test_evaluation",
+    "tests.test_cli_eval",
+    "tests.test_cli_ui",
 ]
 SEARCH_TESTS = [
     "tests.test_embedder",
     "tests.test_vector_store",
     "tests.test_search",
     "tests.test_cli_search",
+    "tests.test_index_build",
+    "tests.test_chunker",
+    "tests.test_cli_eval",
 ]
 
 

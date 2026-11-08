@@ -22,14 +22,11 @@ def _patch_transformers_compat() -> None:
     Injecting a no-op stub prevents the ``ImportError`` without affecting
     any functionality we use (we only need the BGEM3FlagModel encoder).
     """
-    try:
-        from transformers.utils.import_utils import is_torch_fx_available  # noqa: F401
-    except ImportError:
-        import transformers.utils.import_utils as _tiu
+    import transformers.utils.import_utils as _tiu
 
-        if not hasattr(_tiu, "is_torch_fx_available"):
-            _tiu.is_torch_fx_available = lambda: False  # type: ignore[attr-defined]
-            logger.debug("Injected is_torch_fx_available shim for transformers compat")
+    if not hasattr(_tiu, "is_torch_fx_available"):
+        setattr(_tiu, "is_torch_fx_available", lambda: False)
+        logger.debug("Injected is_torch_fx_available shim for transformers compat")
 
 
 class Embedder:
@@ -37,8 +34,9 @@ class Embedder:
 
     provider = "local"
 
-    def __init__(self, model_name: str = DEFAULT_MODEL, use_fp16: bool = True):
+    def __init__(self, model_name: str = DEFAULT_MODEL, use_fp16: bool = True, *, return_sparse: bool = True):
         self.model = model_name
+        self._return_sparse = return_sparse
         _patch_transformers_compat()
         from FlagEmbedding import BGEM3FlagModel
 
@@ -46,6 +44,22 @@ class Embedder:
         self._model = BGEM3FlagModel(model_name, use_fp16=use_fp16)
         self._model_name = model_name
         logger.info("Model loaded successfully")
+
+    @property
+    def max_input_tokens(self) -> int:
+        """Content capacity, excluding the special tokens added by the active tokenizer."""
+        config = getattr(self._model.model, "config", None)
+        limits = [value for value in (self._model.tokenizer.model_max_length,
+                                      getattr(config, "max_position_embeddings", None))
+                  if type(value) is int and 0 < value < 1_000_000]
+        maximum = min(limits) if limits else self._model.passage_max_length
+        return int(maximum - self._model.tokenizer.num_special_tokens_to_add(pair=False))
+
+    def encode(self, text: str) -> list[int]:
+        return list(self._model.tokenizer.encode(text, add_special_tokens=False))
+
+    def decode(self, tokens: list[int]) -> str:
+        return str(self._model.tokenizer.decode(tokens, skip_special_tokens=True))
 
     def embed(self, texts: List[str]) -> Dict[str, Any]:
         """Embed a batch of texts, returning dense and sparse vectors.
@@ -55,13 +69,14 @@ class Embedder:
         """
         output = self._model.encode(
             texts,
+            max_length=self.max_input_tokens + self._model.tokenizer.num_special_tokens_to_add(pair=False),
             return_dense=True,
-            return_sparse=True,
+            return_sparse=self._return_sparse,
             return_colbert_vecs=False,
         )
         return {
             "dense": output["dense_vecs"].tolist(),
-            "sparse": output["lexical_weights"],
+            "sparse": output["lexical_weights"] if self._return_sparse else [{} for _ in texts],
         }
 
     def embed_query(self, query: str) -> Dict[str, Any]:
@@ -114,6 +129,16 @@ class OpenAIEmbedder:
         except KeyError:
             self._enc = tiktoken.get_encoding("cl100k_base")
 
+    @property
+    def max_input_tokens(self) -> int:
+        return self._max_input_tokens
+
+    def encode(self, text: str) -> list[int]:
+        return list(self._enc.encode(text, disallowed_special=()))
+
+    def decode(self, tokens: list[int]) -> str:
+        return str(self._enc.decode(tokens))
+
     def _prepare(self, text: str) -> tuple[str, int]:
         """Return the text truncated to the token cap and its token count."""
         tokens = self._enc.encode(text or " ", disallowed_special=())
@@ -162,4 +187,4 @@ def make_embedder(settings: "Settings") -> Any:
             max_input_tokens=settings.embedding_max_input_tokens,
             max_batch_tokens=settings.embedding_max_batch_tokens,
         )
-    return Embedder(model_name=settings.embedding_model, use_fp16=settings.embedding_use_fp16)
+    return Embedder(model_name=settings.embedding_model, use_fp16=settings.embedding_use_fp16, return_sparse=False)

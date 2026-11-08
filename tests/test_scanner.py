@@ -2,6 +2,7 @@
 import unittest
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from rsi.core.scanner import scan_directory
 
@@ -39,7 +40,7 @@ class TestFileLog(unittest.TestCase):
         """reddit-stash records failed items without a type; both filters drop them."""
         from rsi.core.file_log import get_comment_entries, get_post_entries
 
-        log = {
+        log: dict[str, dict[str, Any]] = {
             "abc-Sub-Submission-POST": {"subreddit": "Sub", "type": "Submission", "file_path": "Sub/POST_abc.md"},
             "SAVED_POST_zzz": {"status": "failed", "attempts": 2},
         }
@@ -150,12 +151,16 @@ class TestScannerAllFileTypes(unittest.TestCase):
             {"c1": "own", "c2": "saved", "c3": "upvoted", "c4": "gdpr"},
         )
 
-    def test_frontmatter_comment_uses_frontmatter_fields(self):
+    def test_frontmatter_comment_keeps_rendered_context_and_root_fields(self):
         result = self._scan({"Python/SAVED_COMMENT_c9.md": FRONTMATTER_COMMENT.format(id="c9")})
         comment = result.comments[0]
         self.assertEqual(comment.id, "c9")
         self.assertEqual(comment.author, "someone")
-        self.assertEqual(comment.body, "Line one\nline two: with colon")
+        self.assertEqual(comment.body, (
+            "# Comment by /u/someone\n\nLine one\nline two: with colon\n\n"
+            "**Upvotes:** 4 | **Permalink:** [Link](https://reddit.com/r/Python/comments/abc/t/c9/)\n\n"
+            "## Context: Post by /u/op\n- **Title:** Parent Title"
+        ))
         self.assertEqual(comment.score, 4)
         self.assertEqual(comment.parent_title, "Parent Title")
         self.assertEqual(comment.subreddit, "Python")

@@ -1,0 +1,302 @@
+{
+  "absent_count": 10,
+  "answerable_count": 50,
+  "limitations": "Frozen functional reference, not a universal performance target. FTS tie order can vary across dependency versions.",
+  "metrics": {
+    "mrr@10": 0.98,
+    "ndcg@10": 0.9852371901428583,
+    "recall@10": 1.0
+  },
+  "mode": "keyword",
+  "rankings": {
+    "a001": [
+      "post:f001"
+    ],
+    "a002": [
+      "post:f003",
+      "post:f034"
+    ],
+    "a003": [
+      "post:f005",
+      "post:f038"
+    ],
+    "a004": [
+      "post:f012",
+      "post:f020",
+      "post:f009",
+      "post:f044"
+    ],
+    "a005": [
+      "post:f021",
+      "post:f006",
+      "post:f045",
+      "post:f050"
+    ],
+    "a006": [
+      "post:f023"
+    ],
+    "a007": [
+      "post:f033"
+    ],
+    "a008": [
+      "post:f032",
+      "post:f037",
+      "post:f041"
+    ],
+    "a009": [
+      "post:f050",
+      "post:f026",
+      "post:f004"
+    ],
+    "a010": [
+      "post:f037",
+      "post:f011",
+      "post:f025",
+      "post:f049"
+    ],
+    "q001": [
+      "post:f001",
+      "post:f042"
+    ],
+    "q002": [
+      "post:f002"
+    ],
+    "q003": [
+      "post:f003",
+      "post:f034"
+    ],
+    "q004": [
+      "post:f004"
+    ],
+    "q005": [
+      "post:f005",
+      "post:f038"
+    ],
+    "q006": [
+      "post:f006",
+      "post:f021",
+      "post:f045",
+      "post:f050"
+    ],
+    "q007": [
+      "post:f007"
+    ],
+    "q008": [
+      "post:f008",
+      "post:f043"
+    ],
+    "q009": [
+      "post:f009"
+    ],
+    "q010": [
+      "post:f010",
+      "post:f042"
+    ],
+    "q011": [
+      "post:f011",
+      "post:f044"
+    ],
+    "q012": [
+      "post:f012",
+      "post:f034",
+      "post:f020",
+      "post:f009",
+      "post:f035",
+      "post:f024",
+      "post:f021",
+      "post:f026",
+      "post:f032",
+      "post:f006"
+    ],
+    "q013": [
+      "post:f013",
+      "post:f032",
+      "post:f047"
+    ],
+    "q014": [
+      "post:f014",
+      "post:f027"
+    ],
+    "q015": [
+      "post:f015",
+      "post:f027"
+    ],
+    "q016": [
+      "post:f016",
+      "post:f024",
+      "post:f035",
+      "post:f021",
+      "post:f026",
+      "post:f032",
+      "post:f006",
+      "post:f034",
+      "post:f004"
+    ],
+    "q017": [
+      "post:f017"
+    ],
+    "q018": [
+      "post:f018"
+    ],
+    "q019": [
+      "post:f019"
+    ],
+    "q020": [
+      "post:f020",
+      "post:f012",
+      "post:f027"
+    ],
+    "q021": [
+      "post:f021",
+      "post:f006",
+      "post:f045",
+      "post:f035",
+      "post:f024",
+      "post:f026",
+      "post:f032",
+      "post:f004",
+      "post:f034",
+      "post:f016"
+    ],
+    "q022": [
+      "post:f022",
+      "post:f035",
+      "post:f048"
+    ],
+    "q023": [
+      "post:f023",
+      "post:f046"
+    ],
+    "q024": [
+      "post:f024",
+      "post:f008"
+    ],
+    "q025": [
+      "post:f025",
+      "post:f037",
+      "post:f011"
+    ],
+    "q026": [
+      "post:f026",
+      "post:f004",
+      "post:f024",
+      "post:f035",
+      "post:f021",
+      "post:f006",
+      "post:f032",
+      "post:f034",
+      "post:f016"
+    ],
+    "q027": [
+      "post:f027",
+      "post:f020"
+    ],
+    "q028": [
+      "post:f028"
+    ],
+    "q029": [
+      "post:f029"
+    ],
+    "q030": [
+      "post:f030"
+    ],
+    "q031": [
+      "post:f031"
+    ],
+    "q032": [
+      "post:f032",
+      "post:f037",
+      "post:f041"
+    ],
+    "q033": [
+      "post:f033",
+      "post:f040"
+    ],
+    "q034": [
+      "post:f034",
+      "post:f012",
+      "post:f035",
+      "post:f024",
+      "post:f021",
+      "post:f006",
+      "post:f032",
+      "post:f026",
+      "post:f004",
+      "post:f016"
+    ],
+    "q035": [
+      "post:f035",
+      "post:f022",
+      "post:f048"
+    ],
+    "q036": [
+      "post:f036",
+      "post:f020",
+      "post:f012",
+      "post:f009",
+      "post:f044"
+    ],
+    "q037": [
+      "post:f037",
+      "post:f032",
+      "post:f011",
+      "post:f025"
+    ],
+    "q038": [
+      "post:f038",
+      "post:f005"
+    ],
+    "q039": [
+      "post:f039"
+    ],
+    "q040": [
+      "post:f040",
+      "post:f045",
+      "post:f041",
+      "post:f046",
+      "post:f049",
+      "post:f043",
+      "post:f042",
+      "post:f048",
+      "post:f050",
+      "post:f044"
+    ],
+    "q041": [
+      "post:f041"
+    ],
+    "q042": [
+      "post:f042"
+    ],
+    "q043": [
+      "post:f043"
+    ],
+    "q044": [
+      "post:f044",
+      "post:f050"
+    ],
+    "q045": [
+      "post:f045"
+    ],
+    "q046": [
+      "post:f046"
+    ],
+    "q047": [
+      "post:f047"
+    ],
+    "q048": [
+      "post:f022",
+      "post:f048"
+    ],
+    "q049": [
+      "post:f034",
+      "post:f049"
+    ],
+    "q050": [
+      "post:f050",
+      "post:f044"
+    ]
+  },
+  "reference_lancedb_version": "0.41.0",
+  "snapshot_sha256": "dfb8145df9a197d0bda54212c9aa629ba354e13a91723054f5ad6fc8ec9966ac",
+  "split": "all"
+}

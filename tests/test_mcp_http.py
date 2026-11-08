@@ -42,10 +42,9 @@ class TestToolHandlers(unittest.TestCase):
 
         self.srv = srv
         self.engine = FakeSearchEngine()
-        self.prev, srv._search_engine = srv._search_engine, self.engine
-
-    def tearDown(self):
-        self.srv._search_engine = self.prev
+        engine_patch = patch.object(srv, "_search_engine", self.engine)
+        engine_patch.start()
+        self.addCleanup(engine_patch.stop)
 
     def test_search_needs_no_llm(self):
         with patch("rsi.chat.providers.availability.find_available_provider") as find:
@@ -77,8 +76,17 @@ class TestToolHandlers(unittest.TestCase):
         from rsi.chat.engine import DirectEngine
 
         class FakeLLM:
+            context_window = 4096
+            max_output_tokens = 512
+
+            def count_tokens(self, messages):
+                return sum(len(m.content.encode("utf-8")) + 16 for m in messages)
+
             def generate(self, messages):
                 return "answer"
+
+            def stream(self, messages):
+                yield "answer"
 
         with patch("rsi.chat.providers.availability.find_available_provider",
                    return_value=("openai", "gpt-4o-mini", None)), \
@@ -91,6 +99,21 @@ class TestToolHandlers(unittest.TestCase):
         self.assertIn("answer", out[0].text)
         self.assertEqual(self.engine.calls[-1][1], 50)
 
+    def test_chat_sources_keep_exact_evidence_location(self):
+        from rsi.chat.engine import ChatResponse
+
+        source = {"text": "evidence", "file_path": "/archive/thread.md", "evidence_id": "comment:answer",
+                  "chunk_id": "post:thread:4", "source_start": 600, "source_end": 612,
+                  "permalink": "https://reddit.com/evidence"}
+        with patch("rsi.chat.providers.availability.find_available_provider", return_value=("ollama", "model", None)), \
+                patch("rsi.chat.providers.base.create_provider"), \
+                patch("rsi.chat.engine.DirectEngine.chat", return_value=ChatResponse("Answer [1]", [source])):
+            out = asyncio.run(self.srv._handle_reddit_chat({"query": "q"}))
+        text = out[0].text
+        for value in ("[1]", "/archive/thread.md", "comment:answer", "post:thread:4", "600:612",
+                      "https://reddit.com/evidence"):
+            self.assertIn(value, text)
+
 
 @unittest.skipUnless(HAS_MCP, "requires mcp extra")
 class TestHttpTransport(unittest.TestCase):
@@ -99,10 +122,9 @@ class TestHttpTransport(unittest.TestCase):
 
         self.srv = srv
         self.engine = FakeSearchEngine()
-        self.prev, srv._search_engine = srv._search_engine, self.engine
-
-    def tearDown(self):
-        self.srv._search_engine = self.prev
+        engine_patch = patch.object(srv, "_search_engine", self.engine)
+        engine_patch.start()
+        self.addCleanup(engine_patch.stop)
 
     def client(self, allowed_hosts=()):
         return TestClient(self.srv.create_http_app(token=TOKEN, allowed_hosts=list(allowed_hosts)))

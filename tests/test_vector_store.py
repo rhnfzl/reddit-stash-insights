@@ -5,6 +5,43 @@ from pathlib import Path
 
 
 class TestVectorStore(unittest.TestCase):
+    def test_chunk_upserts_preserve_sibling_passages(self):
+        from rsi.indexer.vector_store import VectorStore
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = VectorStore(Path(tmpdir))
+            records = [{"id": "p", "content_type": "post", "chunk_id": f"post:p:{i}",
+                        "source_doc_id": "post:p", "generation": "old", "text": f"passage {i}",
+                        "vector": [0.1] * 4} for i in range(3)]
+            store.add_records(records)
+            store.add_records(records)
+            self.assertEqual(store.count(), 3)
+            store.add_records([{**records[0], "generation": "new", "text": "replacement"}])
+            store.remove_stale_chunks("post:p", "new")
+            self.assertEqual(store.count(), 1)
+            self.assertEqual(store.sample_texts(1), ["replacement"])
+
+    def test_filter_values_are_literals_in_all_search_modes(self):
+        from rsi.indexer.vector_store import VectorStore
+
+        values = ["ordinary", "reader's", "ordinary' OR 1=1 --", "a\\b", "日本語"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = VectorStore(db_path=Path(tmpdir) / "test.lance")
+            store.add_records([
+                {"id": str(i), "content_type": "post", "subreddit": value,
+                 "text": "shared tutorial", "vector": [0.1] * 4}
+                for i, value in enumerate(values)
+            ])
+            store.create_fts_index()
+            for value in values:
+                searches = {
+                    "semantic": lambda: store.vector_search([0.1] * 4, subreddit=value),
+                    "keyword": lambda: store.fts_search("tutorial", subreddit=value),
+                    "hybrid": lambda: store.hybrid_search("tutorial", [0.1] * 4, subreddit=value),
+                }
+                for mode, search in searches.items():
+                    with self.subTest(value=value, mode=mode):
+                        self.assertEqual([row["subreddit"] for row in search()], [value])
+
     def test_create_and_query_table(self):
         from rsi.indexer.vector_store import VectorStore
 

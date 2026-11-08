@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Iterator
 
-from rsi.chat.providers.base import ChatMessage
+from rsi.chat.providers.base import ChatMessage, estimate_tokens
 
 
 class OllamaProvider:
@@ -18,6 +18,8 @@ class OllamaProvider:
         max_tokens: int = 512,
         context_window: int = 4096,
     ):
+        if not 0 < max_tokens < context_window:
+            raise ValueError("max_tokens must be positive and smaller than context_window")
         import requests
 
         self._requests = requests
@@ -32,7 +34,8 @@ class OllamaProvider:
             "model": self._model,
             "messages": [m.to_dict() for m in messages],
             "stream": stream,
-            "options": {"temperature": self._temperature, "num_predict": self._max_tokens},
+            "options": {"temperature": self._temperature, "num_predict": self._max_tokens,
+                        "num_ctx": self._context_window},
         }
 
     def generate(self, messages: list[ChatMessage]) -> str:
@@ -67,3 +70,10 @@ class OllamaProvider:
     def context_window(self) -> int:
         """Maximum token context length supported by the loaded model."""
         return self._context_window
+
+    @property
+    def max_output_tokens(self) -> int:
+        return self._max_tokens
+
+    def count_tokens(self, messages: list[ChatMessage]) -> int:
+        return estimate_tokens(messages)

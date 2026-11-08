@@ -19,12 +19,17 @@ model = "BAAI/bge-m3"       # HuggingFace model ID, or API model name for "opena
 use_fp16 = true              # Use FP16 for faster inference (recommended)
 # base_url = "http://localhost:4000/v1"  # "openai" only; defaults to OPENAI_BASE_URL
 
+[index]
+chunk_tokens = 512          # Maximum embedding tokens per passage, including context
+chunk_overlap = 64          # Overlap inside oversized paragraphs
+
 [store]
 db_path = "~/.rsi/index/vectors.lance"   # LanceDB vector database location
 
 [llm]
 provider = "llama-cpp"       # LLM backend: "llama-cpp", "ollama", or "openai"
 model = "qwen2.5:7b"         # Model name, tag, or path to GGUF file
+allow_cloud_fallback = false # Permit an OpenAI-compatible fallback only after explicit consent
 
 [chat]
 context_docs = 5             # Number of retrieved documents per RAG query
@@ -49,10 +54,13 @@ Each config key has a corresponding environment variable. These take the highest
 | `RSI_EMBEDDING_API_KEY` | *(env only)* | `OPENAI_API_KEY` |
 | `RSI_EMBEDDING_BATCH` | *(env only)* | `128` inputs per embeddings request |
 | `RSI_INDEX_CHUNK` | *(env only)* | `512` items embedded and inserted at a time |
-| `RSI_MAX_TEXT_CHARS` | *(env only)* | `32000` characters of each item indexed (embedding models read about this much anyway; bounds memory on archives with long threads) |
+| `RSI_CHUNK_TOKENS` | `index.chunk_tokens` | `512` embedding tokens per passage |
+| `RSI_CHUNK_OVERLAP` | `index.chunk_overlap` | `64` tokens of overlap inside oversized paragraphs |
+| `RSI_MAX_TEXT_CHARS` | Deprecated compatibility setting | Ignored by passage indexing; complete documents are indexed |
 | `RSI_DB_PATH` | `store.db_path` | `~/.rsi/index/vectors.lance` |
 | `RSI_LLM_PROVIDER` | `llm.provider` | `llama-cpp` |
 | `RSI_LLM_MODEL` | `llm.model` | `qwen2.5:7b` |
+| `RSI_ALLOW_CLOUD_FALLBACK` | `llm.allow_cloud_fallback` | `false` (accepts only `true` or `false`) |
 | `RSI_CHAT_CONTEXT_DOCS` | `chat.context_docs` | `5` |
 | `RSI_CHAT_SEARCH_MODE` | `chat.search_mode` | `hybrid` |
 | `RSI_S3_BUCKET` | `s3.bucket` | *(none)* |
@@ -83,17 +91,58 @@ rsi index ~/reddit --s3-bucket $RSI_S3_BUCKET
 `local` needs the `search` extra (torch, BGE-M3). `openai` needs the `embed-openai` extra and calls any
 OpenAI-compatible `/v1/embeddings` endpoint: each input is cut to 8000 tokens with the model tokenizer
 (tiktoken), requests stay under 128 inputs and 250k tokens, and the SDK retries rate limits and server errors.
-Vectors are inserted in chunks of `RSI_INDEX_CHUNK`, so memory does not grow with the archive.
+The indexer packs adjacent short comments into passages and preserves their original body text.
+Each passage includes `evidence_refs`, a nonempty list of evidence IDs, permalinks, parent IDs, and clipped body offsets.
+Packed passages use the source thread as their primary evidence and URL. Single-evidence passages retain their evidence-specific fields.
+Oversized paragraphs and code
+use overlapping windows with the active embedding tokenizer. Unicode characters stay intact.
+The 512-token limit includes repeated title and comment context. The indexer retains evidence after
+character 32,000 and writes at most `RSI_INDEX_CHUNK` passage vectors per batch.
 
-`rsi index` writes `rsi_index.json` inside the database directory twice: with `"complete": false` before the
-first row, and with `"complete": true` last, after every row and the full-text index:
-`{schema, complete, provider, model, dim, rows, parse_errors, built_at}`. Readers (`search`, `chat`, `health`,
-the MCP server, the UI) refuse an unfinished build (exit 1) and an index built with a different provider or
-model (exit 4), and print the command to run. An index without this file is treated as `local`/`BAAI/bge-m3`.
-Switching provider needs `rsi index <dir> --rebuild`.
+Saved comment searches include exported parent threads and replies, including text written by other authors.
+The parser keeps the full rendered export after its first recognized frontmatter block, with `body` as a fallback when rendering is empty.
+Source references follow exported nesting and fallback links. They do not reconstruct a complete comment graph.
+Reindex existing comment archives to recover context omitted by earlier parser versions.
+Use a separate index directory to keep the current index available during validation.
 
-Rows are upserted on (content type, Reddit id), so running `rsi index` again, or retrying after a failed
-build, never duplicates rows. `RSI_INDEX_CHUNK` must be a positive integer.
+Search returns one best passage per source thread. For the default result limit, it requests 50, 100, then 200 candidates.
+For larger limits, candidate depths are at least the requested limit, twice that limit, then four times that limit.
+Duplicate-heavy rankings can still return fewer source threads than requested. Search limits must be positive integers.
+Rows retain the original `id`, `file_path`, and `content_type`. `chunk_id` identifies the passage;
+`source_doc_id` identifies its archive document; `evidence_id` identifies the post or embedded comment;
+`parent_doc_id` identifies the source thread. `permalink` links to the passage evidence when available.
+`source_permalink` retains the document URL. Missing links stay empty. `parent_id` records the immediate
+comment parent when available. `source_start` and `source_end` are character offsets into the parsed
+body, as recorded by `source_offset_basis = "body"`.
+
+`rsi index` writes schema 2 metadata in `rsi_index.json`. Metadata includes provider, model, dimension,
+row count, parse errors, build time, `input_token_capacity`, and `chunks: {version: 3, max_tokens: 512, overlap: 64}`.
+Readers reject unknown schemas, different chunk settings, and different embedding models before querying.
+The `complete` marker is false during indexing and true only after the full-text index finishes.
+Readers refuse unfinished builds. Retry the same index command to finish an interrupted build.
+Passage upserts use `chunk_id`. Successful updates remove stale passages from shorter documents.
+A failed embedding batch does not remove the previous document's remaining passages.
+
+Existing schema 1 indexes and indexes without metadata remain readable. They retain their original
+whole-document retrieval. Indexes without metadata use `local`/`BAAI/bge-m3` identity.
+Writers refuse these legacy indexes to prevent mixed schemas. Build a separate directory:
+
+```bash
+rsi index ~/reddit --db-path ~/.rsi/index/passages.lance
+RSI_DB_PATH=~/.rsi/index/passages.lance rsi health
+```
+
+Point readers at the new directory after validation. Keep the old directory for rollback.
+`--rebuild` deletes the selected table, so use it only when discarding that index is intended.
+Changing chunk settings or the embedding provider requires a fresh directory or an explicit rebuild.
+The unreleased chunk algorithms 1 and 2 require a fresh directory or rebuild before algorithm 3 writes.
+Legacy schema 1 remains readable.
+The passage token limit cannot exceed the active encoder capacity. Invalid limits are rejected before metadata writes or rebuild deletion.
+Local capacity excludes tokenizer special tokens. Local encoding explicitly uses the model/tokenizer sequence limit.
+OpenAI capacity uses the configured per-input token cap.
+The internal local embedder disables unused BGE sparse output. Retrieval uses dense vectors and full-text search.
+Direct `Embedder()` callers retain sparse output by default; `return_sparse=False` is an explicit keyword option.
+`RSI_INDEX_CHUNK` must be positive. Chunk overlap must be nonnegative and smaller than the token limit.
 
 ### Index and health exit codes
 
@@ -103,7 +152,7 @@ build, never duplicates rows. `RSI_INDEX_CHUNK` must be a positive integer.
 | 1 | Unexpected error (for example the embeddings API failed after retries) | Unhealthy: no index, unfinished build, no rows, or the probe search failed |
 | 2 | Bad arguments | Bad arguments |
 | 3 | `--max-error-pct` gate: zero items or too many parse errors; no metadata written | |
-| 4 | Existing index built with another embedder; rerun with `--rebuild` | Index built with another embedder |
+| 4 | Legacy schema or incompatible chunk/model settings; use a fresh directory or `--rebuild` | Unknown schema or incompatible chunk/model settings |
 
 `rsi health [--db-path PATH] [--mode keyword|hybrid|semantic]` searches for words taken from stored rows,
 longest first (up to five tries), so stop words and over-long tokens do not fail a valid index.
@@ -122,6 +171,7 @@ embeddings API outage.
 |-----|------|---------|-------------|
 | `provider` | string | `llama-cpp` | LLM backend to use. See [providers.md](providers.md) for setup details. |
 | `model` | string | `qwen2.5:7b` | Interpretation depends on provider: a GGUF file path for `llama-cpp`, a model tag for `ollama`, or a model name for `openai`. |
+| `allow_cloud_fallback` | bool | `false` | Permit an OpenAI-compatible fallback when local providers fail. Explicit `openai` selection permits that endpoint without this setting. |
 
 ### `[chat]`
 

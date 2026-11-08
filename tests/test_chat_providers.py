@@ -36,14 +36,18 @@ class TestLLMProviderProtocol(unittest.TestCase):
     def test_protocol_defines_methods(self):
         from rsi.chat.providers.base import ChatMessage, LLMProvider
 
-        # Verify it's a runtime-checkable Protocol
-        self.assertTrue(getattr(LLMProvider, "__protocol_attrs__", None) is not None or hasattr(LLMProvider, "__abstractmethods__") or True)
-
         # Create a concrete class that satisfies the protocol
         class FakeProvider:
             @property
             def context_window(self) -> int:
                 return 4096
+
+            @property
+            def max_output_tokens(self) -> int:
+                return 512
+
+            def count_tokens(self, messages: list[ChatMessage]) -> int:
+                return sum(len(message.content.encode()) for message in messages)
 
             def generate(self, messages: list[ChatMessage]) -> str:
                 return "response"
@@ -82,7 +86,14 @@ class TestLlamaCppProvider(unittest.TestCase):
         """Instantiate LlamaCppProvider with the real llama_cpp module replaced by a fake."""
         fake_mod = types.ModuleType("llama_cpp")
         fake_mod.Llama = mock_llama_cls  # type: ignore[attr-defined]
-        with patch.dict(sys.modules, {"llama_cpp": fake_mod}):
+        fake_format = types.ModuleType("llama_cpp.llama_chat_format")
+        fake_format.format_llama2 = lambda **kw: types.SimpleNamespace(prompt="<s>user:Hi</s>", added_special=True)  # type: ignore[attr-defined]
+        fake_format.chat_formatter_to_chat_completion_handler = MagicMock()  # type: ignore[attr-defined]
+        fake_format.Jinja2ChatFormatter = MagicMock(  # type: ignore[attr-defined]
+            return_value=lambda **kw: types.SimpleNamespace(prompt="<eos>user:Hi<eos>", added_special=True))
+        mock_llama_cls.return_value.metadata = kwargs.pop("metadata", {})
+        mock_llama_cls.return_value.n_ctx.return_value = kwargs.get("n_ctx", 4096)
+        with patch.dict(sys.modules, {"llama_cpp": fake_mod, "llama_cpp.llama_chat_format": fake_format}):
             mod = importlib.import_module("rsi.chat.providers.llama_cpp_provider")
             importlib.reload(mod)
             return mod.LlamaCppProvider(model="/tmp/fake.gguf", **kwargs)
@@ -124,6 +135,40 @@ class TestLlamaCppProvider(unittest.TestCase):
         mock_llama_cls = MagicMock()
         provider = self._make_provider(mock_llama_cls, n_ctx=8192)
         self.assertEqual(provider.context_window, 8192)
+
+    def test_counts_rendered_prompt_with_loaded_tokenizer(self):
+        from rsi.chat.providers.base import ChatMessage
+
+        llama = MagicMock()
+        llama.return_value.tokenize.return_value = [1, 2, 3, 4, 5]
+        provider = self._make_provider(llama, max_tokens=123)
+        self.assertEqual(provider.count_tokens([ChatMessage("user", "Hi")]), 5)
+        llama.return_value.tokenize.assert_called_once_with(b"<s>user:Hi</s>", add_bos=False, special=True)
+        self.assertEqual(provider.max_output_tokens, 123)
+
+    def test_invalid_output_reserve_rejected_before_loading(self):
+        with self.assertRaisesRegex(ValueError, "max_tokens"):
+            self._make_provider(MagicMock(), n_ctx=512, max_tokens=512)
+
+    def test_gguf_template_handles_missing_bos_and_uses_special_tokens(self):
+        from rsi.chat.providers.base import ChatMessage
+
+        llama = MagicMock()
+        llama.return_value.token_eos.return_value = 2
+        llama.return_value.token_bos.return_value = -1
+        llama.return_value.detokenize.return_value = b"<eos>"
+        llama.return_value.tokenize.return_value = [2, 4, 5, 2]
+        provider = self._make_provider(llama, metadata={"tokenizer.chat_template": "synthetic template"})
+        self.assertEqual(provider.count_tokens([ChatMessage("user", "Hi")]), 4)
+        llama.return_value.tokenize.assert_called_once_with(b"<eos>user:Hi<eos>", add_bos=False, special=True)
+        self.assertNotIn([-1], [call.args[0] for call in llama.return_value.detokenize.call_args_list])
+
+    def test_gguf_template_rejects_missing_eos_before_empty_stop(self):
+        llama = MagicMock()
+        llama.return_value.token_eos.return_value = -1
+        llama.return_value.token_bos.return_value = -1
+        with self.assertRaisesRegex(ValueError, "EOS"):
+            self._make_provider(llama, metadata={"tokenizer.chat_template": "synthetic template"})
 
     def test_satisfies_protocol(self):
         mock_llama_cls = MagicMock()
@@ -187,6 +232,29 @@ class TestOllamaProvider(unittest.TestCase):
         from rsi.chat.providers.base import LLMProvider
 
         self.assertIsInstance(provider, LLMProvider)
+
+    def test_payload_enforces_context_and_output_reserve(self):
+        from rsi.chat.providers.base import ChatMessage
+
+        requests = MagicMock()
+        provider = self._make_provider(requests, context_window=2048, max_tokens=321)
+        provider.generate([ChatMessage("user", "Hi")])
+        options = requests.post.call_args.kwargs["json"]["options"]
+        self.assertEqual(options["num_ctx"], 2048)
+        self.assertEqual(options["num_predict"], 321)
+        self.assertEqual(provider.max_output_tokens, 321)
+
+    def test_counter_reserves_unicode_bytes_and_template_framing(self):
+        from rsi.chat.providers.base import ChatMessage
+
+        provider = self._make_provider(MagicMock())
+        self.assertGreater(provider.count_tokens([ChatMessage("user", "🦄")]), 4)
+        self.assertGreater(provider.count_tokens([ChatMessage("user", "🦄")]),
+                           provider.count_tokens([ChatMessage("user", "x")]))
+
+    def test_invalid_output_reserve_rejected(self):
+        with self.assertRaisesRegex(ValueError, "max_tokens"):
+            self._make_provider(MagicMock(), max_tokens=0)
 
 
 class TestOpenAIProvider(unittest.TestCase):
@@ -255,6 +323,17 @@ class TestOpenAIProvider(unittest.TestCase):
 
         self.assertIsInstance(provider, LLMProvider)
 
+    def test_remote_counter_includes_framing_and_output_reserve(self):
+        from rsi.chat.providers.base import ChatMessage
+
+        provider = self._make_provider(MagicMock(), max_tokens=123)
+        self.assertGreater(provider.count_tokens([ChatMessage("user", "🦄")]), 4)
+        self.assertEqual(provider.max_output_tokens, 123)
+
+    def test_invalid_output_reserve_rejected(self):
+        with self.assertRaisesRegex(ValueError, "max_tokens"):
+            self._make_provider(MagicMock(), context_window=512, max_tokens=513)
+
 
 class TestCheckProvider(unittest.TestCase):
     """Tests for provider availability checking."""
@@ -267,7 +346,7 @@ class TestCheckProvider(unittest.TestCase):
             from rsi.chat.providers.availability import _check_ollama
 
             result = _check_ollama()
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertIn("not reachable", result)
 
     def test_check_ollama_available(self):
@@ -290,7 +369,7 @@ class TestCheckProvider(unittest.TestCase):
 
             with patch.object(availability, "_MODELS_DIR", Path("/tmp/nonexistent_rsi_models_dir")):
                 result = availability.check_provider("llama-cpp", "/tmp/nonexistent.gguf")
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertIn("No GGUF model found", result)
 
     def test_check_openai_no_key(self):
@@ -300,12 +379,49 @@ class TestCheckProvider(unittest.TestCase):
             from rsi.chat.providers.availability import _check_openai
 
             result = _check_openai()
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertIn("OPENAI_API_KEY", result)
 
 
 class TestFindAvailableProvider(unittest.TestCase):
     """Tests for the fallback logic in find_available_provider."""
+
+    def test_provider_destination_reports_endpoint_without_credentials(self):
+        from rsi.chat.providers.availability import provider_destination
+
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(provider_destination("openai"), "openai at https://api.openai.com/v1")
+            self.assertEqual(provider_destination(" OpEnAI "), "openai at https://api.openai.com/v1")
+        with patch.dict(os.environ, {"OPENAI_BASE_URL": "http://user:password@localhost:1234/v1?key=secret#secret"}):
+            self.assertEqual(provider_destination("openai"), "openai at http://localhost:1234/v1")
+        self.assertEqual(provider_destination("ollama"), "ollama at http://localhost:11434")
+        self.assertEqual(provider_destination("llama-cpp"), "llama-cpp (in process)")
+
+    def test_local_failure_does_not_probe_cloud_without_consent(self):
+        from rsi.chat.providers import availability
+
+        with patch.object(availability, "check_provider", side_effect=lambda p, m: None if p == "openai" else "offline") as check:
+            provider, _, note = availability.find_available_provider("ollama", "test")
+        self.assertIsNone(provider)
+        self.assertNotIn("openai", [call.args[0] for call in check.call_args_list])
+        assert note is not None
+        self.assertIn("cloud fallback disabled", note.lower())
+
+    def test_cloud_fallback_requires_opt_in(self):
+        from rsi.chat.providers import availability
+
+        with patch.object(availability, "check_provider", side_effect=lambda p, m: None if p == "openai" else "offline"):
+            provider, model, note = availability.find_available_provider("ollama", "test", allow_cloud_fallback=True)
+        self.assertEqual((provider, model), ("openai", "test"))
+        assert note is not None
+        self.assertIn("openai", note)
+
+    def test_explicit_cloud_selection_is_supported_without_fallback_consent(self):
+        from rsi.chat.providers import availability
+
+        with patch.object(availability, "check_provider", return_value=None):
+            self.assertEqual(availability.find_available_provider("openai", "test"), ("openai", "test", None))
+
 
     def test_fallback_to_alternative(self):
         """When selected provider is unavailable, falls back to an alternative."""
@@ -319,7 +435,7 @@ class TestFindAvailableProvider(unittest.TestCase):
 
         self.assertIsNotNone(provider)
         self.assertNotEqual(provider, "ollama")
-        self.assertIsNotNone(note)
+        assert note is not None
         self.assertIn("ollama", note.lower())
 
     def test_all_unavailable(self):
@@ -331,6 +447,7 @@ class TestFindAvailableProvider(unittest.TestCase):
 
         self.assertIsNone(provider)
         self.assertIsNone(model)
+        assert note is not None
         self.assertIn("No LLM provider available", note)
 
     def test_gguf_auto_detect(self):
@@ -345,7 +462,7 @@ class TestFindAvailableProvider(unittest.TestCase):
             gguf_file.touch()
             with patch.object(availability, "_MODELS_DIR", Path(tmpdir)):
                 result = availability._resolve_gguf_path("not-a-real-path")
-        self.assertIsNotNone(result)
+        assert result is not None
         self.assertTrue(result.endswith(".gguf"))
 
 

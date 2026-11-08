@@ -125,8 +125,8 @@ def parse_comment(file_path: Path, subreddit: str) -> Comment:
     if author_match:
         author = author_match.group(1)
 
-    # Extract comment body — text between first permalink line and next ---
-    body = _extract_comment_body(content)
+    # Keep exported context and replies alongside the primary comment.
+    body = content.strip()
 
     # Extract permalink and derive comment ID from it
     comment_id = ""
@@ -182,8 +182,8 @@ def _frontmatter(content: str) -> dict | None:
 
 def _parse_frontmatter_comment(file_path: Path, subreddit: str, content: str, fm: dict) -> Comment:
     """Comment with frontmatter: id, author, body, score, permalink (GDPR CSV-only: id, title, permalink)."""
-    # CSV-only GDPR files have no body field; the markdown after the frontmatter is all there is
-    body = str(fm.get("body") or "").strip() or (split_frontmatter(content) or ("", ""))[1].strip()
+    # Rendered exports include parent threads and replies beyond the primary frontmatter body.
+    body = (split_frontmatter(content) or ("", ""))[1].strip() or str(fm.get("body") or "").strip()
     title_match = re.search(r"\*\*Title:\*\*\s*(.+)", content)
     try:
         score = int(fm.get("score") or 0)
@@ -208,25 +208,6 @@ def _extract_title(body: str) -> str:
         if line.startswith("# "):
             return line[2:].strip()
     return ""
-
-
-def _extract_comment_body(content: str) -> str:
-    """Extract the comment's own text from the markdown.
-
-    The comment body is the text after the permalink line
-    and before the next '---' separator.
-    """
-    lines = content.splitlines()
-    body_lines = []
-    in_body = False
-    for line in lines:
-        if in_body:
-            if line.strip() == "---":
-                break
-            body_lines.append(line)
-        elif "**Permalink:**" in line:
-            in_body = True
-    return "\n".join(body_lines).strip()
 
 
 def _strip_prefix(value: str, prefix: str) -> str:

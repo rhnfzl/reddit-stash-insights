@@ -17,10 +17,17 @@ class LlamaCppProvider:
         temperature: float = 0.3,
         max_tokens: int = 512,
     ):
+        if not 0 < max_tokens < n_ctx:
+            raise ValueError("max_tokens must be positive and smaller than n_ctx")
         import os
         import sys
 
         from llama_cpp import Llama
+        from llama_cpp.llama_chat_format import (
+            Jinja2ChatFormatter,
+            chat_formatter_to_chat_completion_handler,
+            format_llama2,
+        )
 
         # Suppress C-level ggml_metal_init "skipping kernel" messages on stderr
         stderr_fd = sys.stderr.fileno()
@@ -38,9 +45,23 @@ class LlamaCppProvider:
             os.dup2(old_stderr, stderr_fd)
             os.close(old_stderr)
             os.close(devnull)
-        self._n_ctx = n_ctx
+        self._n_ctx = self._llm.n_ctx()
         self._temperature = temperature
         self._max_tokens = max_tokens
+        template = self._llm.metadata.get("tokenizer.chat_template")
+        eos_id, bos_id = self._llm.token_eos(), self._llm.token_bos()
+        if isinstance(template, str) and eos_id < 0:
+            raise ValueError("GGUF chat template requires an EOS token; this model is unsupported")
+        self._formatter = (
+            Jinja2ChatFormatter(
+                template=template,
+                eos_token=self._llm.detokenize([eos_id], special=True).decode("utf-8") if eos_id >= 0 else "",
+                bos_token=self._llm.detokenize([bos_id], special=True).decode("utf-8") if bos_id >= 0 else "",
+                stop_token_ids=[eos_id] if eos_id >= 0 else None,
+            ) if isinstance(template, str) else format_llama2
+        )
+        # Counting and generation must render the same template, including stop tokens.
+        self._llm.chat_handler = chat_formatter_to_chat_completion_handler(self._formatter)
 
     def generate(self, messages: list[ChatMessage]) -> str:
         """Return a complete response for the given conversation."""
@@ -67,3 +88,12 @@ class LlamaCppProvider:
     def context_window(self) -> int:
         """Maximum token context length supported by the loaded model."""
         return self._n_ctx
+
+    @property
+    def max_output_tokens(self) -> int:
+        return self._max_tokens
+
+    def count_tokens(self, messages: list[ChatMessage]) -> int:
+        rendered = self._formatter(messages=[m.to_dict() for m in messages])
+        return len(self._llm.tokenize(rendered.prompt.encode("utf-8"),
+                                      add_bos=not rendered.added_special, special=True))

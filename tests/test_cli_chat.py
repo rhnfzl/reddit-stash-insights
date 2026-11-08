@@ -76,7 +76,9 @@ class TestChatCommandSingleTurn(unittest.TestCase):
         mock_engine.chat.return_value = MagicMock(
             answer="The answer is 42.",
             sources=[
-                {"subreddit": "Python", "text": "some context", "file_path": "/test.md"},
+                {"subreddit": "Python", "text": "some context", "file_path": "/test.md",
+                 "evidence_id": "comment:answer", "chunk_id": "post:thread:4",
+                 "source_start": 600, "source_end": 612, "permalink": "https://reddit.com/evidence"},
             ],
         )
         mock_build.return_value = mock_engine
@@ -86,6 +88,10 @@ class TestChatCommandSingleTurn(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, msg=result.output)
         self.assertIn("The answer is 42.", result.output)
         self.assertIn("r/Python", result.output)
+        self.assertIn("comment:answer", result.output)
+        self.assertIn("post:thread:4", result.output)
+        self.assertIn("600:612", result.output)
+        self.assertIn("https://reddit.com/evidence", result.output)
 
     @patch("rsi.cli._build_chat_engine")
     def test_single_turn_streaming(self, mock_build):
@@ -298,6 +304,7 @@ class TestBuildChatEngine(unittest.TestCase):
         self.assertEqual(mock_search_cls.call_args.kwargs["db_path"], Path("/tmp/test.lance"))
         self.assertIsNotNone(mock_search_cls.call_args.kwargs["settings"])
         mock_create.assert_called_once_with(provider="ollama", model="qwen2.5:7b")
+        _mock_find.assert_called_once_with("ollama", "qwen2.5:7b", allow_cloud_fallback=False)
 
         # Engine should be a DirectEngine
         from rsi.chat.engine import DirectEngine

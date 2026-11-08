@@ -8,13 +8,26 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
 _MODELS_DIR = Path.home() / ".rsi" / "models"
 
-# Ordered fallback preference: local-first, then remote.
+# Cloud alternatives require explicit fallback consent.
 _FALLBACK_ORDER = ["llama-cpp", "ollama", "openai"]
+
+
+def provider_destination(provider: str) -> str:
+    """Describe where context goes without exposing URL credentials."""
+    provider = provider.lower().strip()
+    if provider == "openai":
+        url = urlsplit(os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1")
+        endpoint = url._replace(netloc=url.netloc.rsplit("@", 1)[-1], query="", fragment="").geturl()
+        return f"openai at {endpoint}"
+    if provider == "ollama":
+        return "ollama at http://localhost:11434"
+    return f"{provider} (in process)"
 
 
 def check_provider(provider: str, model: str) -> str | None:
@@ -38,13 +51,16 @@ def check_provider(provider: str, model: str) -> str | None:
 def find_available_provider(
     selected: str,
     model: str,
+    *,
+    allow_cloud_fallback: bool = False,
 ) -> tuple[str | None, str | None, str | None]:
     """Try *selected* provider first, then iterate fallbacks.
 
     Returns ``(provider, model_to_use, fallback_note | None)``.
     If no provider is available, returns ``(None, None, error_message)``.
     """
-    # 1. Try the selected provider.
+    selected = selected.lower().strip()
+    # An explicitly selected cloud provider does not need fallback consent.
     err = check_provider(selected, model)
     if err is None:
         resolved_model = _resolve_model(selected, model)
@@ -57,6 +73,8 @@ def find_available_provider(
     for alt in _FALLBACK_ORDER:
         if alt == selected:
             continue
+        if alt == "openai" and allow_cloud_fallback is not True:
+            continue
         alt_model = _resolve_model(alt, model)
         alt_err = check_provider(alt, alt_model)
         if alt_err is None:
@@ -66,6 +84,8 @@ def find_available_provider(
         errors.append(f"{alt}: {alt_err}")
 
     all_errors = "; ".join(errors)
+    if not allow_cloud_fallback:
+        all_errors += "; cloud fallback disabled (set [llm].allow_cloud_fallback = true to opt in)"
     return (None, None, f"No LLM provider available. {all_errors}")
 
 

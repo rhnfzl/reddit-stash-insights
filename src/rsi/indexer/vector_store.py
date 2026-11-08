@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 TABLE_NAME = "posts"
 
 
+def _subreddit_predicate(subreddit: str) -> str:
+    """Keep a subreddit value inside one SQL string literal."""
+    return "subreddit = '" + subreddit.replace("'", "''") + "'"
+
+
 class VectorStore:
     """LanceDB-backed vector store with FTS (BM25) support."""
 
@@ -40,7 +45,7 @@ class VectorStore:
         return [str(r["text"]) for r in rows]
 
     def add_records(self, records: List[Dict[str, Any]]) -> None:
-        """Upsert records on (content_type, id). Creates the table on first call.
+        """Upsert passages by chunk_id, or legacy rows by (content_type, id).
 
         Upserting makes a re-run or a retry after a failed chunk idempotent.
         """
@@ -52,12 +57,19 @@ class VectorStore:
                 logger.info("Added %d records to vector store", len(records))
                 return
         (
-            self._table.merge_insert(["content_type", "id"])
+            self._table.merge_insert(["chunk_id"] if "chunk_id" in records[0] else ["content_type", "id"])
             .when_matched_update_all()
             .when_not_matched_insert_all()
             .execute(records)
         )
         logger.info("Added %d records to vector store", len(records))
+
+    def remove_stale_chunks(self, source_doc_id: str, generation: str) -> None:
+        """Remove prior document generations only after all replacement passages exist."""
+        if self._table is not None:
+            source = source_doc_id.replace("'", "''")
+            version = generation.replace("'", "''")
+            self._table.delete(f"source_doc_id = '{source}' AND generation != '{version}'")
 
     def create_fts_index(self) -> None:
         """Create a Tantivy full-text search index on the 'text' column."""
@@ -77,7 +89,7 @@ class VectorStore:
             return []
         q = self._table.search(query_vector).limit(limit)
         if subreddit:
-            q = q.where(f"subreddit = '{subreddit}'")
+            q = q.where(_subreddit_predicate(subreddit))
         result: list[dict[str, Any]] = q.to_list()
         return result
 
@@ -92,7 +104,7 @@ class VectorStore:
             return []
         q = self._table.search(query, query_type="fts").limit(limit)
         if subreddit:
-            q = q.where(f"subreddit = '{subreddit}'")
+            q = q.where(_subreddit_predicate(subreddit))
         result: list[dict[str, Any]] = q.to_list()
         return result
 
@@ -123,7 +135,7 @@ class VectorStore:
             .limit(limit)
         )
         if subreddit:
-            q = q.where(f"subreddit = '{subreddit}'")
+            q = q.where(_subreddit_predicate(subreddit))
         result: list[dict[str, Any]] = q.to_list()
         return result
 

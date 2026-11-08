@@ -31,7 +31,7 @@ DEFAULT_DB_PATH = RSI_DIR / "index" / "vectors.lance"
 
 @dataclass
 class Settings:
-    """Application settings — all model names and paths are configurable."""
+    """Application settings with configurable model names and paths."""
 
     # Embedding
     embedding_provider: str = "local"  # local (BGE-M3 in process) or openai (OpenAI-compatible API)
@@ -42,8 +42,9 @@ class Settings:
     embedding_max_input_tokens: int = 8000  # per-input cap, below the 8191-token model limit (openai)
     embedding_max_batch_tokens: int = 250_000  # per-request cap, below the 300k API limit (openai)
     index_chunk_size: int = 512  # items embedded and inserted per chunk while indexing
-    # Characters of each item kept for indexing; embedding models read about 32k anyway,
-    # and long comment threads otherwise keep the whole archive in memory several times.
+    chunk_tokens: int = 512
+    chunk_overlap: int = 64
+    # Deprecated compatibility setting. Passage indexing never truncates source documents.
     max_text_chars: int = 32_000
 
     # Vector store
@@ -52,6 +53,7 @@ class Settings:
     # LLM (for future chat module)
     llm_provider: str = "llama-cpp"  # llama-cpp, ollama, openai
     llm_model: str = "qwen2.5:7b"
+    allow_cloud_fallback: bool = False
 
     # Chat / RAG
     chat_context_docs: int = 5  # number of context docs for RAG
@@ -80,6 +82,10 @@ class Settings:
             settings.embedding_provider = embed.get("provider", settings.embedding_provider)
             settings.embedding_base_url = embed.get("base_url", settings.embedding_base_url)
 
+            index = data.get("index", {})
+            settings.chunk_tokens = index.get("chunk_tokens", settings.chunk_tokens)
+            settings.chunk_overlap = index.get("chunk_overlap", settings.chunk_overlap)
+
             store = data.get("store", {})
             if "db_path" in store:
                 settings.db_path = Path(store["db_path"])
@@ -87,6 +93,7 @@ class Settings:
             llm = data.get("llm", {})
             settings.llm_provider = llm.get("provider", settings.llm_provider)
             settings.llm_model = llm.get("model", settings.llm_model)
+            settings.allow_cloud_fallback = llm.get("allow_cloud_fallback", settings.allow_cloud_fallback)
 
             chat = data.get("chat", {})
             settings.chat_context_docs = chat.get("context_docs", settings.chat_context_docs)
@@ -110,6 +117,10 @@ class Settings:
             settings.embedding_batch_size = int(v)
         if v := os.environ.get("RSI_INDEX_CHUNK"):
             settings.index_chunk_size = int(v)
+        if v := os.environ.get("RSI_CHUNK_TOKENS"):
+            settings.chunk_tokens = int(v)
+        if v := os.environ.get("RSI_CHUNK_OVERLAP"):
+            settings.chunk_overlap = int(v)
         if v := os.environ.get("RSI_MAX_TEXT_CHARS"):
             settings.max_text_chars = int(v)
         if v := os.environ.get("RSI_DB_PATH"):
@@ -118,6 +129,11 @@ class Settings:
             settings.llm_provider = v
         if v := os.environ.get("RSI_LLM_MODEL"):
             settings.llm_model = v
+        if "RSI_ALLOW_CLOUD_FALLBACK" in os.environ:
+            value = os.environ["RSI_ALLOW_CLOUD_FALLBACK"].strip().lower()
+            if value not in ("true", "false"):
+                raise ValueError("RSI_ALLOW_CLOUD_FALLBACK must be true or false")
+            settings.allow_cloud_fallback = value == "true"
         if v := os.environ.get("RSI_CHAT_CONTEXT_DOCS"):
             settings.chat_context_docs = int(v)
         if v := os.environ.get("RSI_CHAT_SEARCH_MODE"):
@@ -127,8 +143,13 @@ class Settings:
         if v := os.environ.get("RSI_S3_PREFIX"):
             settings.s3_prefix = v
 
+        if type(settings.allow_cloud_fallback) is not bool:
+            raise ValueError("[llm].allow_cloud_fallback must be a boolean")
         if settings.index_chunk_size < 1:
             raise ValueError(f"RSI_INDEX_CHUNK must be positive, got {settings.index_chunk_size}")
+        if (type(settings.chunk_tokens) is not int or type(settings.chunk_overlap) is not int
+                or settings.chunk_tokens < 1 or not 0 <= settings.chunk_overlap < settings.chunk_tokens):
+            raise ValueError("chunk tokens must be positive and 0 <= chunk overlap < chunk tokens")
         if settings.max_text_chars < 1:
             raise ValueError(f"RSI_MAX_TEXT_CHARS must be positive, got {settings.max_text_chars}")
         if settings.embedding_provider not in ("local", "openai"):

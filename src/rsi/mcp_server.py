@@ -159,15 +159,19 @@ async def _handle_reddit_search(arguments: dict[str, Any]) -> list[TextContent]:
 def _chat_sync(query: str, limit: int) -> str:
     """Answer one question with a fresh engine, so no history leaks between calls or clients."""
     from rsi.chat.engine import DirectEngine
-    from rsi.chat.providers.availability import find_available_provider
+    from rsi.chat.prompt import source_reference
+    from rsi.chat.providers.availability import find_available_provider, provider_destination
     from rsi.chat.providers.base import create_provider
     from rsi.config import Settings
     from rsi.indexer.search import SearchMode
 
     settings = Settings.load()
-    provider, model, note = find_available_provider(settings.llm_provider, settings.llm_model)
+    provider, model, note = find_available_provider(
+        settings.llm_provider, settings.llm_model, allow_cloud_fallback=settings.allow_cloud_fallback,
+    )
     if provider is None or model is None:
         return f"reddit_chat is unavailable: {note} Use reddit_search instead."
+    logger.warning("Chat context destination: %s (model %s)", provider_destination(provider), model)
     engine = DirectEngine(
         search_engine=_get_search_engine(),
         llm=create_provider(provider=provider, model=model),
@@ -180,7 +184,7 @@ def _chat_sync(query: str, limit: int) -> str:
     if resp.sources:
         parts.append("\nSources:")
         for i, src in enumerate(resp.sources, 1):
-            parts.append(f"  [{i}] r/{src.get('subreddit', '?')} -- {src.get('file_path', '?')}")
+            parts.append(f"  [{i}] r/{src.get('subreddit', '?')} -- {source_reference(src)}")
     return "\n".join(parts)
 
 
@@ -209,7 +213,20 @@ def create_server() -> Server:
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
-        return [REDDIT_SEARCH_TOOL, REDDIT_CHAT_TOOL]
+        from rsi.chat.providers.availability import provider_destination
+        from rsi.config import Settings
+
+        settings = Settings.load()
+        destination = provider_destination(settings.llm_provider)
+        fallback = (
+            f"Cloud fallback allowed: {provider_destination('openai')}."
+            if settings.allow_cloud_fallback else "Cloud fallback disabled."
+        )
+        chat_tool = REDDIT_CHAT_TOOL.model_copy(update={
+            "description": f"{REDDIT_CHAT_TOOL.description} Configured context destination: {destination}. "
+                           f"Local fallbacks may be used. {fallback}",
+        })
+        return [REDDIT_SEARCH_TOOL, chat_tool]
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:

@@ -1,0 +1,36 @@
+{
+  "count": 2,
+  "artifacts": [
+    {
+      "date": "2026-11-07",
+      "kind": "research",
+      "slug": "reddit-stash-insights-0-1-0-case-study",
+      "title": "Reddit Stash Insights 0.1.0 case study",
+      "summary": "Preserve evidence from long Reddit threads and measure retrieval before the first public package release.",
+      "keywords": [
+        "reddit",
+        "retrieval",
+        "evaluation",
+        "release"
+      ],
+      "source": "RSI 78e00b8 baseline and release branch; local frozen archive evaluation",
+      "href": "2026-11-07-research-reddit-stash-insights-0-1-0-case-study.html"
+    },
+    {
+      "date": "2026-11-07",
+      "kind": "plan",
+      "slug": "reddit-stash-insights-next-release",
+      "title": "Reddit Stash Insights next release",
+      "summary": "Ship a reproducible search evaluation, recover long-thread evidence, and make the first public installation work.",
+      "keywords": [
+        "reddit",
+        "retrieval",
+        "evaluation",
+        "release",
+        "chunking"
+      ],
+      "source": "RSI 78e00b8; companion 70ec478; read-only homelab inspection",
+      "href": "2026-11-07-plan-reddit-stash-insights-next-release.html"
+    }
+  ]
+}
