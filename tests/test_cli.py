@@ -11,7 +11,7 @@ class TestCLI(unittest.TestCase):
         runner = CliRunner()
         result = runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("0.1.0", result.output)
+        self.assertIn("0.1.1", result.output)
 
     def test_scan_command_on_empty_dir(self):
         from rsi.cli import app

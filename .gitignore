@@ -29,6 +29,7 @@ eval-reports/
 .personal-eval/
 personal-eval/
 # Personal studies include derived reports, even when they contain no raw text.
+docs/agents/
 docs/human-html/*-plan-evidence-supported-answers-for-saved-reddit-posts.html
 docs/human-html/*-plan-chat-generation-and-fresh-evaluation-experiments.html
 docs/human-html/*-research-evidence-release-evaluation.html

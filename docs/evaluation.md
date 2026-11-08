@@ -57,7 +57,7 @@ Run these commands from the checkout after building the wheel:
 ```sh
 python -m build
 python -m venv /tmp/rsi-wheel-eval
-/tmp/rsi-wheel-eval/bin/python -m pip install './dist/reddit_stash_insights-0.1.0-py3-none-any.whl[index]'
+/tmp/rsi-wheel-eval/bin/python -m pip install './dist/reddit_stash_insights-0.1.1-py3-none-any.whl[index]'
 cd /tmp
 /tmp/rsi-wheel-eval/bin/rsi eval --fixture --mode keyword --split all --output /tmp/rsi-wheel-report.json
 ```

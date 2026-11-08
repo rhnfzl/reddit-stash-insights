@@ -52,6 +52,8 @@ def violation(name: str, raw: bytes) -> str | None:
     path = PurePosixPath(name)
     if name.startswith(FIXTURE):
         return None
+    if name.startswith("docs/agents/"):
+        return "private agent working notes"
     if {"data", "reddit", "eval-reports", ".personal-eval", "personal-eval"} & set(path.parts):
         return "personal evaluation directory"
     if any(part.endswith(".lance") for part in path.parts):
@@ -118,6 +120,7 @@ def self_check() -> None:
     assert violation(FIXTURE + "questions.jsonl", b'{"query_id":"fictional"}') is None
     assert violation(FIXTURE + "corpus/POST_fictional.md", b"fictional") is None
     assert violation("data/eval/report.json", b"{}")
+    assert violation("docs/agents/release-progress.md", b"private working notes")
     assert violation("index/vectors.lance/data/example", b"binary")
     assert violation("questions.jsonl", b"{}")
     assert violation("archive/SAVED_example.md", b"fictional")
@@ -141,7 +144,7 @@ def self_check() -> None:
         pass
     else:
         raise AssertionError("Malformed push input passed the privacy check")
-    print("PASS: 21 fictional privacy checks")
+    print("PASS: 22 fictional privacy checks")
 
 
 def main() -> int:
