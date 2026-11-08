@@ -495,19 +495,22 @@ def evaluate_search(
                     raise ValueError("evaluation index metadata must be a JSON object")
                 engine = SearchEngine(db_path=db_path, settings=settings)
                 def search(query, limit, mode, subreddit):
-                    return engine.search_candidates(query, limit=limit, mode=SearchMode(mode), subreddit=subreddit)
+                    return engine.search(query, limit=limit, mode=SearchMode(mode), subreddit=subreddit)
                 index_identity = {**(metadata or {"schema": "legacy", "rows": engine.store.count()}),
                                   **index_fingerprint(engine.store, snapshot)}
             identity = {"embedding": "none (keyword)" if mode == "keyword" else {
                 "provider": settings.embedding_provider, "model": settings.embedding_model,
             }, "index": index_identity, "config": {"mode": mode, "split": split, "cutoff": 10,
-                  "candidate_depths": [50, 100, 200], "thread_order": "first occurrence",
+                  "candidate_depths": [50, 100, 200] if fixture else None,
+                  "retrieval": "raw fixture passages" if fixture else "public source-thread search",
+                  "thread_order": "first occurrence",
                   "allow_remote": allow_remote, "chunk_tokens": settings.chunk_tokens,
                   "chunk_overlap": settings.chunk_overlap,
                   "index_chunk_size": settings.index_chunk_size, "embedding_use_fp16": settings.embedding_use_fp16},
                 "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
                 "qrels_sha256": hashlib.sha256(qrels.read_bytes()).hexdigest()}
-            report = evaluate(queries, labels, snapshot, search, mode=mode, split=split, identity=identity)
+            report = evaluate(queries, labels, snapshot, search, mode=mode, split=split, identity=identity,
+                              thread_search=not fixture)
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
     except (ValueError, OSError, RuntimeError, ImportError) as error:

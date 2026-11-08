@@ -35,6 +35,11 @@ jobs:
       - name: Install core dependencies
         run: uv pip install --system -e ".[dev]"
 
+      - name: Check evaluation privacy
+        run: |
+          python scripts/check_eval_privacy.py --self-check
+          python scripts/check_eval_privacy.py
+
       - name: Lint
         run: ruff check src/ tests/
 

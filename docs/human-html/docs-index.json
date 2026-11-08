@@ -5,31 +5,30 @@
       "date": "2026-11-07",
       "kind": "research",
       "slug": "reddit-stash-insights-0-1-0-case-study",
-      "title": "Reddit Stash Insights 0.1.0 case study",
-      "summary": "Published 0.1.0 retains more judged evidence on an authored private test set, with explicit indexing costs and evaluation limits.",
+      "title": "Evaluate search with your own saved posts",
+      "summary": "Run a fictional fixture, then evaluate your own archive without publishing personal results.",
       "keywords": [
-        "reddit",
-        "retrieval",
         "evaluation",
-        "release"
+        "privacy",
+        "fictional fixture",
+        "retrieval"
       ],
-      "source": "Published v0.1.0, sanitized aggregate record and 78e00b8 baseline",
+      "source": "Reusable evaluator and fictional public fixture",
       "href": "2026-11-07-research-reddit-stash-insights-0-1-0-case-study.html"
     },
     {
       "date": "2026-11-07",
       "kind": "plan",
       "slug": "reddit-stash-insights-next-release",
-      "title": "Reddit Stash Insights next release",
-      "summary": "Ship a reproducible search evaluation, recover long-thread evidence, and make the first public installation work.",
+      "title": "Evaluate your own archive privately",
+      "summary": "Keep reusable evaluation code public and personal datasets and results local.",
       "keywords": [
-        "reddit",
-        "retrieval",
         "evaluation",
-        "release",
-        "chunking"
+        "privacy",
+        "fictional fixture",
+        "retrieval"
       ],
-      "source": "RSI 78e00b8; companion 70ec478; read-only homelab inspection",
+      "source": "Reusable evaluator and fictional public fixture",
       "href": "2026-11-07-plan-reddit-stash-insights-next-release.html"
     }
   ]

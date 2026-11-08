@@ -164,6 +164,10 @@ Configure a working LLM provider before asking chat questions.
 
 ### Evaluation
 
+The reusable evaluator accepts your own private questions and source labels.
+Keep personal data and every derived report outside Git. Only fictional examples are public.
+The evaluator scores retrieval; it does not train model weights or judge chat answers.
+
 Run the packaged synthetic check without downloading a model or providing private data:
 
 ```bash

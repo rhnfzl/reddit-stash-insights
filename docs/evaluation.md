@@ -3,6 +3,24 @@
 Search evaluation shows whether saved source threads appear near the top of search results.
 It measures retrieval against frozen labels, without a chat model or an LLM judge.
 
+## What is public and what stays private
+
+The reusable evaluator, file formats, scorer tests and fictional fixture are public.
+Personal archives, questions, reference answers, labels, indexes and run outputs stay local.
+This includes aggregate scores, corpus fingerprints, hardware measurements, plans and case studies derived from a personal archive.
+Removing raw text does not make a personal evaluation report publishable.
+
+Use a directory outside the checkout, or the ignored `data/eval/` directory.
+The default `evaluation.json` output is also ignored. A different output name may need its own ignore rule.
+From a source checkout, run `python scripts/check_eval_privacy.py --working-tree` before staging changes.
+The committed-tree check runs in CI and the repository's optional pre-push script.
+It catches known private paths and evaluation formats; it is not a general secret or personal-data detector.
+
+`rsi eval` does not select a chat model or upload data for judging.
+Keyword evaluation and the fictional fixture make no embedding calls.
+Semantic and hybrid evaluation use the selected embedding provider; hosted embeddings require explicit `--allow-remote` consent.
+Separate chat-evaluation tools can send questions and passages to hosted judges. Their permissions are separate from Git publication.
+
 ## Run the public fixture
 
 Install the index extra. It includes LanceDB, but does not install an embedding model:
@@ -25,7 +43,7 @@ Each answerable question has one direct source-thread label. All other fixture t
 The scorer's unit tests also cover partial grade-one labels.
 
 All 50 answer/evidence pairs, 60 Markdown files, 2,500 qrels and snapshot hashes received independent agent review.
-Human review remains pending. The long threads contain repeated filler and the short threads contain single facts.
+The labels are agent reviewed and have no human calibration. The long threads contain repeated filler and the short threads contain single facts.
 This fixture checks installation and scoring behavior. It is not evidence of general retrieval superiority.
 
 `src/rsi/eval_fixture/expected.json` freezes reference keyword rankings and scores with its LanceDB version.
@@ -52,6 +70,19 @@ The fixture is covered by the package's existing `src/rsi` wheel target.
 Keep private corpora, labels and reports outside the repository.
 Freeze a copied archive and use an isolated evaluation index. Do not rebuild a live archive index.
 Create `questions.jsonl`, `qrels.jsonl`, and `snapshot.json` next to each other.
+
+You can copy the fictional fixture into an empty private directory as a format example:
+
+```python
+from pathlib import Path
+from rsi.evaluation import export_fixture
+
+example = Path.home() / '.local/share/reddit-stash-insights/eval-example'
+example.mkdir(parents=True, exist_ok=True, mode=0o700)
+export_fixture(example)
+```
+
+The export refuses to overwrite existing files. Replace the examples with your own corpus and labels, then regenerate the snapshot.
 
 Each question is one JSON object:
 
@@ -117,8 +148,9 @@ No chat provider is selected or invoked.
 ## Read the scores
 
 The cutoff is ten unique source threads, ordered by their first retrieved occurrence.
-The candidate pool starts at 50 and increases to 100 and 200 as needed.
-The report records candidate depth and unique result count. Exhausted pools can return fewer than ten threads.
+The raw fixture and default Python adapter start at 50 candidates, increasing to 100 and 200 as needed.
+Those reports record candidate depth and unique result count. Exhausted pools can return fewer than ten threads.
+Supplied-index runs score the public thread-search interface and report `candidate_depth:null`.
 
 - Recall@10 divides retrieved judged-relevant threads by all judged-relevant threads. Grades one and two count.
 - MRR@10 is the reciprocal rank of the first judged-relevant thread, or zero for a miss.
@@ -141,3 +173,27 @@ Peak RSS includes setup and is null on systems without the standard-library `res
 
 Freeze development settings before opening test results. Compare paired scores on the same frozen corpus and splits.
 Report exact deltas, affected queries and uncertainty. Fifty questions give directional evidence, not a general superiority claim.
+
+## Tune settings with your own data
+
+Use development questions to compare search modes, chunking settings, or embedding configurations.
+Build a separate evaluation index when an embedding configuration changes; do not reuse incompatible vectors.
+Keep the final test split closed until the settings are fixed. Use a new test split after tuning from old test failures.
+Retain failed queries and incomplete labels. Report both improvements and regressions.
+
+This framework measures retrieval. It does not train or fine-tune model weights.
+You can evaluate a separately trained model through a supported embedding provider and a matching isolated index.
+Chat answer support, completeness, citations and clarification need a separate evaluator; retrieval scores do not establish those qualities.
+
+## Public search and raw candidate diagnostics
+
+For a supplied archive index, `rsi eval` scores the same source-thread search used by `rsi search`.
+Reports identify this with `retrieval_unit: "source_threads"`. Each question requests ten source threads once.
+`candidate_depth` is null because the public source-thread interface does not report its internal raw candidate depth.
+
+The packaged fixture and the default Python `evaluate()` adapter still accept raw passage rankings.
+Those reports use `retrieval_unit: "raw_passages"` and record the actual adaptive depth of 50, 100, or 200 rows.
+The scorer maps corpus aliases and scores each source once in both paths. Python callers can set `thread_search=True` for a public source-thread retriever.
+
+Retrieval scores do not measure answer support or clarification. Evaluate packed evidence, generated claims, and support-check failures separately.
+No human review gate is required for these agent-reviewed diagnostics. Keep their uncertainty and incomplete judgments visible.

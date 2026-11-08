@@ -238,6 +238,7 @@ def _code_identity() -> dict[str, Any]:
 def evaluate(
     queries: list[dict[str, Any]], labels: dict[str, dict[str, int]], snapshot: dict[str, Any],
     search: Callable[..., list[dict[str, Any]]], *, mode: str, split: str, identity: dict[str, Any],
+    thread_search: bool = False,
 ) -> dict[str, Any]:
     """Keep per-query failures visible and exclude absent cases from retrieval scores."""
     if mode not in ("keyword", "semantic", "hybrid") or split not in ("dev", "test", "all"):
@@ -260,7 +261,17 @@ def evaluate(
                 return [{**item, "parent_doc_id": aliases.get(canonical_doc_id(item), canonical_doc_id(item))}
                         for item in rows]
 
-            ranking, depth = retrieve_threads(mapped_search, query["query"], mode, query.get("subreddit"))
+            if thread_search:
+                rows = mapped_search(query["query"], limit=10, mode=mode, subreddit=query.get("subreddit"))
+                if not isinstance(rows, list) or len(rows) > 10:
+                    raise ValueError("thread search returned an invalid ranking")
+                unique: dict[str, dict[str, Any]] = {}
+                for item in rows:
+                    unique.setdefault(canonical_doc_id(item), item)
+                ranking = list(unique.values())
+                depth = None
+            else:
+                ranking, depth = retrieve_threads(mapped_search, query["query"], mode, query.get("subreddit"))
             ids = [canonical_doc_id(item) for item in ranking]
             if any(doc not in snapshot["documents"] for doc in ids):
                 raise ValueError("ranking references a document outside the frozen snapshot")
@@ -289,6 +300,7 @@ def evaluate(
     latencies = sorted(row["latency_ms"] for row in results)
     return {
         "schema": 1, "mode": mode, "split": split, "snapshot_sha256": snapshot["sha256"],
+        "retrieval_unit": "source_threads" if thread_search else "raw_passages",
         "identity": {**_code_identity(), **identity}, "answerable_count": len(answerable),
         "absent_count": len(results) - len(answerable), "error_count": errors, "metrics": metrics,
         "judged_coverage": judged / retrieved if retrieved else None,

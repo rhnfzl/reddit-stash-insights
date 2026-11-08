@@ -26,3 +26,12 @@ tests/fixtures/rag_test_questions.json
 evaluation.json
 evaluation-*.json
 eval-reports/
+.personal-eval/
+personal-eval/
+# Personal studies include derived reports, even when they contain no raw text.
+docs/human-html/*-plan-evidence-supported-answers-for-saved-reddit-posts.html
+docs/human-html/*-plan-chat-generation-and-fresh-evaluation-experiments.html
+docs/human-html/*-research-evidence-release-evaluation.html
+docs/human-html/*-research-chat-generation-fresh-evaluation.html
+docs/references/*-evidence-release-evaluation.json
+docs/references/*-chat-generation-fresh-evaluation.json

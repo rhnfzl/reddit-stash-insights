@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+Compare search settings on private data without publishing personal results.
+
+- Keep personal evaluation data and all derived reports local. Add repository privacy checks and document the public fictional fixture.
+- Evaluate supplied indexes through the public source-thread search interface; keep raw passage diagnostics separate.
+- Document local dataset templates, frozen test splits and the limits of retrieval-only scores.
+
 ## 0.1.0
 
 Saved Reddit threads can be searched and cited without losing their later comments.
