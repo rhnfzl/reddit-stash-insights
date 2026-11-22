@@ -240,6 +240,28 @@ Share sanitised examples only. Keep private archives, queries, usernames, paths,
 
 ## Development
 
+Run the same privacy, lint and type checks as CI in a lightweight Python environment:
+
+```bash
+uv venv --python 3.12
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+python scripts/check_eval_privacy.py --self-check
+python scripts/check_eval_privacy.py --working-tree
+ruff check src/ tests/
+mypy src/rsi/
+python -m unittest tests.test_cli tests.test_cli_ui -v
+```
+
+From a regular clone, run `bash scripts/install-hooks.sh` to install the optional
+pre-push hook. It checks privacy and runs Ruff and mypy on changed Python files.
+
+Pull requests run core and mocked chat tests on Python 3.11 through 3.14.
+Search and service tests run on 3.11 through 3.13. Search runs real BGE-M3
+inference using CPU PyTorch on pull requests and pushes to `main`.
+The weekly run also tests installation from PyPI's default package index.
+PRs verify the installed wheel and smoke-test the Docker image.
+
 ```bash
 pip install -e ".[all,dev]"
 
