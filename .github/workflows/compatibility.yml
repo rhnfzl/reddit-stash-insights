@@ -87,6 +87,31 @@ jobs:
           fi
           uv pip install --system "${torch_backend[@]}" -e ".[search,dev]"
 
+      - name: Download BGE-M3 test weights
+        if: github.event_name != 'schedule'
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from huggingface_hub import snapshot_download
+
+          model_dir = Path(os.environ["RUNNER_TEMP"]) / "bge-m3"
+          # The PyTorch tests use one set of weights. The weekly run still loads the model from the Hub.
+          snapshot_download(
+              "BAAI/bge-m3",
+              revision="5617a9f61b028005a4858fdac845db406aefb181",
+              local_dir=model_dir,
+              allow_patterns=[
+                  "config.json", "pytorch_model.bin", "colbert_linear.pt", "sparse_linear.pt",
+                  "tokenizer.json", "tokenizer_config.json", "special_tokens_map.json",
+                  "sentencepiece.bpe.model",
+              ],
+          )
+          with open(os.environ["GITHUB_ENV"], "a") as test_env:
+              print(f"RSI_EMBEDDING_MODEL={model_dir}", file=test_env)
+              print("HF_HUB_OFFLINE=1", file=test_env)
+          PY
+
       - name: Run search tests
         run: |
           python -m unittest tests.test_embedder tests.test_vector_store tests.test_search tests.test_chunker tests.test_index_build tests.test_cli_search -v
