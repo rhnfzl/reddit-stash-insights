@@ -35,8 +35,9 @@ class TestUILaunch(unittest.TestCase):
         self.assertEqual(command[5:], ["--server.address", "127.0.0.1", "--server.port", "8509"])
 
     def test_invalid_port_fails_before_launch(self):
-        with patch("subprocess.run") as run:
-            result = CliRunner().invoke(app, ["ui", "--port", "0"])
-        self.assertEqual(result.exit_code, 2)
-        self.assertIn("range", result.output)
-        run.assert_not_called()
+        for port in ("0", "65536"):
+            with self.subTest(port=port), patch("subprocess.run") as run:
+                result = CliRunner().invoke(app, ["ui", "--port", port], env={"NO_COLOR": "1"})
+                self.assertEqual(result.exit_code, 2)
+                self.assertIn("--port", result.output)
+                run.assert_not_called()
