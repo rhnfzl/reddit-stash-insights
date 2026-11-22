@@ -1,6 +1,7 @@
 """Installed UI launching does not depend on the current directory."""
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -37,7 +38,7 @@ class TestUILaunch(unittest.TestCase):
     def test_invalid_port_fails_before_launch(self):
         for port in ("0", "65536"):
             with self.subTest(port=port), patch("subprocess.run") as run:
-                result = CliRunner().invoke(app, ["ui", "--port", port], env={"NO_COLOR": "1"})
+                result = CliRunner().invoke(app, ["ui", "--port", port], color=True)
                 self.assertEqual(result.exit_code, 2)
-                self.assertIn("--port", result.output)
+                self.assertIn("--port", re.sub(r"\x1b\[[0-9;]*m", "", result.output))
                 run.assert_not_called()
