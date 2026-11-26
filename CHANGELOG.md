@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+Rebuilding an index no longer pays to embed text it already has.
+
+- Add `rsi index --reuse-from <index>`: passages whose chunk id and text match a finished index with the same
+  provider, model and chunk settings copy its vectors; only new or changed passages are embedded.
+
 ## 0.1.1
 
 Compare search settings on private data without publishing personal results.

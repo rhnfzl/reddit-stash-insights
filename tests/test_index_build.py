@@ -573,3 +573,82 @@ class TestPassageCapacity(IndexBuildTestCase):
         self.assertEqual((db / "rsi_index.json").read_bytes(), before)
         from rsi.indexer.vector_store import VectorStore
         self.assertEqual(VectorStore(db).count(), 1)
+
+
+class ShiftedEmbedder(FakeEmbedder):
+    """Same identity as FakeEmbedder but other vectors, so a reused vector is told apart."""
+
+    def _vec(self, t):
+        return [x + 1.0 for x in super()._vec(t)]
+
+
+@unittest.skipUnless(HAS_LANCEDB, "requires index extra (lancedb)")
+class TestReuseVectors(IndexBuildTestCase):
+    """--reuse-from copies vectors of unchanged passages and embeds only the rest."""
+
+    def _build(self, reddit, db, embedder=None, extra=()):
+        result, emb = self.run_cli(["index", str(reddit), "--db-path", str(db), "--rebuild", *extra],
+                                   embedder=embedder)
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+        return result, emb
+
+    def _vectors(self, db):
+        from rsi.indexer.vector_store import VectorStore
+
+        rows = VectorStore(db)._table.search().select(["chunk_id", "vector"]).limit(None).to_list()
+        return {r["chunk_id"]: [float(x) for x in r["vector"]] for r in rows}
+
+    def test_only_new_or_changed_passages_are_embedded(self):
+        reddit = make_reddit_dir(self.root, n=4)
+        current, nxt = self.root / "current", self.root / "next"
+        self._build(reddit, current)
+        old = self._vectors(current)
+        # p1 keeps its chunk_id with new text; p9 is new.
+        (reddit / "Python" / "POST_p1.md").write_text(
+            POST.format(id="p1", sub="Python", title="Post 1 asyncio", body="edited zebrafish body"))
+        (reddit / "Python" / "POST_p9.md").write_text(
+            POST.format(id="p9", sub="Python", title="Post 9", body="brand new zebrafish"))
+        result, emb = self._build(reddit, nxt, ShiftedEmbedder(), ["--reuse-from", str(current)])
+        self.assertEqual(len(emb.texts), 2)
+        self.assertTrue(any("edited zebrafish" in t for t in emb.texts))
+        self.assertTrue(any("brand new zebrafish" in t for t in emb.texts))
+        self.assertIn("Reused 3 vectors", result.output)
+        new = self._vectors(nxt)
+        self.assertEqual(len(new), 5)
+        changed = {cid for cid in new if new[cid] != old.get(cid)}
+        self.assertEqual(len(changed), 2, "unchanged passages must keep the stored vector")
+        self.assertEqual(_meta(nxt)["rows"], 5)
+
+    def test_incompatible_source_embeds_everything(self):
+        reddit = make_reddit_dir(self.root, n=3)
+        current, nxt = self.root / "current", self.root / "next"
+        self._build(reddit, current)
+        meta = _meta(current)
+        meta["model"] = "text-embedding-3-large"
+        (current / "rsi_index.json").write_text(json.dumps(meta))
+        _, emb = self._build(reddit, nxt, extra=["--reuse-from", str(current)])
+        self.assertEqual(len(emb.texts), 3)
+
+    def test_unfinished_source_embeds_everything(self):
+        reddit = make_reddit_dir(self.root, n=2)
+        current, nxt = self.root / "current", self.root / "next"
+        self._build(reddit, current)
+        meta = _meta(current)
+        meta["complete"] = False
+        (current / "rsi_index.json").write_text(json.dumps(meta))
+        _, emb = self._build(reddit, nxt, extra=["--reuse-from", str(current)])
+        self.assertEqual(len(emb.texts), 2)
+
+    def test_missing_source_embeds_everything_and_creates_nothing(self):
+        reddit = make_reddit_dir(self.root, n=2)
+        absent = self.root / "absent"
+        _, emb = self._build(reddit, self.root / "next", extra=["--reuse-from", str(absent)])
+        self.assertEqual(len(emb.texts), 2)
+        self.assertFalse(absent.exists())
+
+    def test_reuse_from_the_target_itself_is_refused(self):
+        reddit = make_reddit_dir(self.root, n=1)
+        db = self.root / "db"
+        result, emb = self.run_cli(["index", str(reddit), "--db-path", str(db), "--reuse-from", str(db)])
+        self.assertEqual(result.exit_code, 2, result.output)
+        self.assertEqual(emb.texts, [])

@@ -63,6 +63,10 @@ def index(
         None, "--max-error-pct",
         help="Exit 3 without writing metadata when nothing parses or parse errors exceed this percentage",
     ),
+    reuse_from: Optional[Path] = typer.Option(
+        None, "--reuse-from",
+        help="Finished index to copy vectors from for passages whose text is unchanged (skipped if incompatible)",
+    ),
 ):
     """Build or update the vector search index from reddit-stash content."""
     from rsi.config import Settings
@@ -80,6 +84,9 @@ def index(
         typer.echo(f"Files cached to {reddit_dir}")
 
     db_path = db_path or settings.db_path
+    if reuse_from is not None and Path(reuse_from).resolve() == Path(db_path).resolve():
+        typer.echo("--reuse-from must be another index than --db-path", err=True)
+        raise typer.Exit(2)
 
     typer.echo(f"Scanning {reddit_dir}...")
     scan_result = scan_directory(reddit_dir)
@@ -120,7 +127,9 @@ def index(
     write_meta(db_path, provider=provider, model=model, dim=0, rows=0, parse_errors=n_errors,
                complete=False, chunk_tokens=settings.chunk_tokens, chunk_overlap=settings.chunk_overlap,
                input_token_capacity=input_token_capacity)
-    dim = engine.index_items(chain(scan_result.posts, scan_result.comments))
+    dim = engine.index_items(chain(scan_result.posts, scan_result.comments), reuse_from=reuse_from)
+    if reuse_from is not None:
+        typer.echo(f"Reused {engine.reused_passages} vectors from {reuse_from}, embedded {engine.embedded_passages}")
     write_meta(db_path, provider=provider, model=model, dim=dim, rows=engine.store.count(), parse_errors=n_errors,
                chunk_tokens=settings.chunk_tokens, chunk_overlap=settings.chunk_overlap,
                input_token_capacity=input_token_capacity)
