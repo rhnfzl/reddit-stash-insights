@@ -1,6 +1,7 @@
 """High-level search engine orchestrating embedder + vector store."""
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 from collections.abc import Iterable
@@ -12,13 +13,17 @@ from rsi.core.identity import canonical_doc_id
 from rsi.core.models import Comment, Post
 from rsi.indexer.chunker import iter_chunks
 from rsi.indexer.embedder import make_embedder
-from rsi.indexer.index_meta import IndexConfigMismatch, check_compatible
+from rsi.indexer.index_meta import IndexConfigMismatch, check_compatible, reusable
 from rsi.indexer.vector_store import VectorStore
 
 if TYPE_CHECKING:
     from rsi.config import Settings
 
 logger = logging.getLogger(__name__)
+
+
+def _text_digest(text: str) -> bytes:
+    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest()
 
 
 class SearchMode(Enum):
@@ -56,6 +61,7 @@ class SearchEngine:
         self._store = VectorStore(db_path=db_path)
         self._embedder = embedder
         self._embedder_lock = threading.Lock()
+        self.reused_passages = self.embedded_passages = 0  # counts of the last index_items run
         if verify:
             provider, model = self.embedder_identity()
             check_compatible(
@@ -132,14 +138,35 @@ class SearchEngine:
             raise ValueError("index batch size must be positive")
         return capacity
 
-    def index_items(self, items: Iterable[Post | Comment]) -> int:
-        """Stream passages and vectors in bounded batches; replace each source after embedding."""
+    def _reuse_source(self, reuse_from: Optional[Path]) -> Optional[tuple[VectorStore, Dict[str, bytes]]]:
+        """Open ``reuse_from`` when its vectors are valid for this build, else None (embed everything)."""
+        if reuse_from is None:
+            return None
+        if Path(reuse_from).resolve() == self._db_path.resolve():
+            raise ValueError("--reuse-from must be another index than --db-path")
+        provider, model = self.embedder_identity()
+        if not reusable(reuse_from, provider, model, chunk_tokens=self._settings.chunk_tokens,
+                        chunk_overlap=self._settings.chunk_overlap):
+            logger.warning("Not reusing vectors from %s: not a finished index with these settings", reuse_from)
+            return None
+        source = VectorStore(db_path=reuse_from)
+        return source, source.text_digests(_text_digest)
+
+    def index_items(self, items: Iterable[Post | Comment], reuse_from: Optional[Path] = None) -> int:
+        """Stream passages and vectors in bounded batches; replace each source after embedding.
+
+        With ``reuse_from``, a passage whose chunk_id and text both match a row
+        of that finished index takes its stored vector instead of being embedded
+        again. chunk_id is positional, so the text must match too.
+        """
         provider, model = self.embedder_identity()
         check_compatible(self._db_path, self._store.has_table(), provider, model, allow_incomplete=True,
                          chunk_tokens=self._settings.chunk_tokens, chunk_overlap=self._settings.chunk_overlap,
                          writing=True)
         self.validate_index_settings()
         embedder = self._get_embedder()
+        reuse = self._reuse_source(reuse_from)
+        self.reused_passages = self.embedded_passages = 0
         batch_size = self._settings.index_chunk_size
         batch: list[dict[str, Any]] = []
         finished: list[tuple[str, str]] = []
@@ -148,11 +175,25 @@ class SearchEngine:
         def flush() -> None:
             nonlocal dim
             if batch:
-                dense = embedder.embed([row["text"] for row in batch])["dense"]
-                if len(dense) != len(batch) or not dense or not dense[0]:
-                    raise RuntimeError("embedder returned an invalid passage vector batch")
-                dim = len(dense[0])
-                self._store.add_records([{**row, "vector": vector} for row, vector in zip(batch, dense)])
+                vectors: Dict[str, List[float]] = {}
+                if reuse is not None:
+                    old_store, digests = reuse
+                    vectors = old_store.vectors_for(
+                        [row["chunk_id"] for row in batch if digests.get(row["chunk_id"]) == _text_digest(row["text"])]
+                    )
+                todo = [row for row in batch if row["chunk_id"] not in vectors]
+                if todo:
+                    dense = embedder.embed([row["text"] for row in todo])["dense"]
+                    if len(dense) != len(todo) or not dense or not dense[0]:
+                        raise RuntimeError("embedder returned an invalid passage vector batch")
+                    vectors.update(zip((row["chunk_id"] for row in todo), dense))
+                dims = {len(vector) for vector in vectors.values()}
+                if len(dims) != 1 or 0 in dims:
+                    raise RuntimeError("passage vectors in one batch have different or empty dimensions")
+                dim = dims.pop()
+                self.reused_passages += len(batch) - len(todo)
+                self.embedded_passages += len(todo)
+                self._store.add_records([{**row, "vector": vectors[row["chunk_id"]]} for row in batch])
                 batch.clear()
             for source, generation in finished:
                 self._store.remove_stale_chunks(source, generation)

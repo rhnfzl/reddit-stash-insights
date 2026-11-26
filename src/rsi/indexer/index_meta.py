@@ -68,6 +68,23 @@ def remove_meta(db_path: Path) -> None:
     meta_path(db_path).unlink(missing_ok=True)
 
 
+def reusable(db_path: Path, provider: str, model: str, *, chunk_tokens: int, chunk_overlap: int) -> bool:
+    """True when ``db_path`` is a finished passage index built with exactly these settings.
+
+    Only then are its vectors valid for a new build: another model is another
+    vector space, and other chunk settings give the same chunk_id other text.
+    """
+    meta = read_meta(db_path)
+    expected = {"version": ALGORITHM_VERSION, "max_tokens": chunk_tokens, "overlap": chunk_overlap}
+    return (
+        meta is not None
+        and meta.get("schema") == SCHEMA
+        and meta.get("complete") is True
+        and (meta.get("provider"), meta.get("model")) == (provider, model)
+        and meta.get("chunks") == expected
+    )
+
+
 def check_compatible(
     db_path: Path, has_table: bool, provider: str, model: str, *, allow_incomplete: bool = False,
     chunk_tokens: int = 512, chunk_overlap: int = 64, writing: bool = False,

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import lancedb
 
@@ -63,6 +63,25 @@ class VectorStore:
             .execute(records)
         )
         logger.info("Added %d records to vector store", len(records))
+
+    def text_digests(self, digest: Callable[[str], bytes]) -> Dict[str, bytes]:
+        """chunk_id -> digest(text) for every passage, read in batches to bound memory."""
+        digests: Dict[str, bytes] = {}
+        if self._table is None:
+            return digests
+        for batch in self._table.search().select(["chunk_id", "text"]).limit(None).to_batches(4096):
+            for chunk_id, text in zip(batch.column("chunk_id").to_pylist(), batch.column("text").to_pylist()):
+                digests[chunk_id] = digest(text)
+        return digests
+
+    def vectors_for(self, chunk_ids: List[str]) -> Dict[str, List[float]]:
+        """Stored vectors of the given passages, keyed by chunk_id; absent ids are left out."""
+        if self._table is None or not chunk_ids:
+            return {}
+        quoted = ", ".join("'" + chunk_id.replace("'", "''") + "'" for chunk_id in chunk_ids)
+        rows = (self._table.search().where(f"chunk_id IN ({quoted})")
+                .select(["chunk_id", "vector"]).limit(len(chunk_ids)).to_list())
+        return {row["chunk_id"]: [float(x) for x in row["vector"]] for row in rows}
 
     def remove_stale_chunks(self, source_doc_id: str, generation: str) -> None:
         """Remove prior document generations only after all replacement passages exist."""
