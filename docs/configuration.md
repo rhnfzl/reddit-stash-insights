@@ -138,6 +138,19 @@ Changing chunk settings or the embedding provider requires a fresh directory or 
 The unreleased chunk algorithms 1 and 2 require a fresh directory or rebuild before algorithm 3 writes.
 Legacy schema 1 remains readable.
 The passage token limit cannot exceed the active encoder capacity. Invalid limits are rejected before metadata writes or rebuild deletion.
+
+### Reuse vectors on a rebuild
+
+A fresh build embeds every passage again. To pay only for new or changed text, point `--reuse-from` at the
+previous finished index:
+
+```bash
+rsi index ~/reddit --db-path ~/.rsi/index/next.lance --rebuild --reuse-from ~/.rsi/index/current.lance
+```
+
+A passage takes the stored vector only when its `chunk_id` and its text both match a row of that index.
+The source must be complete and built with the same provider, model and chunk settings; otherwise the
+build embeds everything and logs a warning. The source is only read. It must not be the `--db-path` index.
 Local capacity excludes tokenizer special tokens. Local encoding explicitly uses the model/tokenizer sequence limit.
 OpenAI capacity uses the configured per-input token cap.
 The internal local embedder disables unused BGE sparse output. Retrieval uses dense vectors and full-text search.
